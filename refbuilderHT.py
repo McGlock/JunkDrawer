@@ -90,11 +90,12 @@ for file in file_list:
 	clean_fasta_file = join(run_path, run_name + '.clean.fasta')
 	nolin_acc_file = join(run_path, run_name + '.nolin.txt')
 	taxed_fasta_file = join(run_path, run_name + '.taxed.fasta')
+	sorted_fasta_file = join(run_path, run_name + '.sorted.fasta')
 	filtered_fasta_file = join(run_path, run_name + '.filtered.fasta')
 	align_cmd = ['muscle', '-in', file, '-out', ref_aln_file]
 	hmmbuild_cmd = ['hmmbuild --cpu 4', ref_hmm_file, ref_aln_file]
 	hmmsearch_cmd = ['hmmsearch --cpu 4 -A', recruit_aln_file, ref_hmm_file, ref_db_path]
-	sto2fasta_cmd = ['seqmagick convert --ungap --sort length-desc', recruit_aln_file,
+	sto2fasta_cmd = ['seqmagick convert --ungap', recruit_aln_file,
 						recruit_fasta_file
 						]
 	clean_fasta_cmd = ['python ~/bin/JunkDrawer/fast_sweep.py', recruit_fasta_file,
@@ -103,7 +104,10 @@ for file in file_list:
 	build_ref_lineage_cmd = ['python ~/bin/JunkDrawer/build_ref_lineage.py',
 								acc2taxid_lineage_file, clean_fasta_file, run_path
 								]
-	filter_fasta_cmd = ['seqmagick convert', taxed_fasta_file, filtered_fasta_file,
+	sort_fasta_cmd = ['seqmagick convert --sort length-desc', taxed_fasta_file,
+						sorted_fasta_file
+						]
+	filter_fasta_cmd = ['seqmagick convert', sorted_fasta_file, filtered_fasta_file,
 						'--exclude-from-file', nolin_acc_file, '--min-ungapped-length',
 						str(len_cutoff), '--deduplicate-taxa', '--deduplicate-sequences'
 						]
@@ -113,10 +117,12 @@ for file in file_list:
 	#					]
 	if '.fasta' in file:
 		cmds = [run_path, align_cmd, hmmbuild_cmd, hmmsearch_cmd, sto2fasta_cmd,
-				clean_fasta_cmd, build_ref_lineage_cmd, filter_fasta_cmd] # , build_refpkg_cmd]
+				clean_fasta_cmd, build_ref_lineage_cmd, sort_fasta_cmd,
+				filter_fasta_cmd] # , build_refpkg_cmd]
 	elif '.hmm' in file:
 		cmds = [run_path, hmmsearch_cmd, sto2fasta_cmd,
-				clean_fasta_cmd, build_ref_lineage_cmd, filter_fasta_cmd] # , build_refpkg_cmd]
+				clean_fasta_cmd, build_ref_lineage_cmd, sort_fasta_cmd,
+				filter_fasta_cmd] # , build_refpkg_cmd]
 	cmds_list.append(cmds)
 
 #run_para = Parallel(n_jobs=int(num_jobs))(delayed(run_cmds)(cmds) for cmds in [cmds_list[0]])
