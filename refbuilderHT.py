@@ -64,7 +64,7 @@ elif isfile(file_path) == True:
 
 cmds_list = []
 # build command list for build refpkgs from ref fasta list
-for file in file_path:
+for file in file_list:
 	run_name = file.split('/')[-1].split('.')[0]
 	run_path = makedir(refpkg_path, run_name)
 	ref_aln_file = join(run_path, run_name + '.ref.aln')
