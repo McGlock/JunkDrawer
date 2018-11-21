@@ -81,8 +81,8 @@ for file in file_list:
 	hmmbuild_cmd = ['hmmbuild --cpu 4', ref_hmm_file, ref_aln_file]
 	hmmsearch_cmd = ['hmmsearch --cpu 4 -A', recruit_aln_file, ref_hmm_file, ref_db_path]
 	sto2fasta_cmd = ['seqmagick convert --ungap', recruit_aln_file,  recruit_fasta_file]
-	clean_fasta_cmd = ['python ~/bin/fast_sweep.py', recruit_fasta_file, clean_fasta_file]
-	build_ref_lineage_cmd = ['python ~/bin/build_ref_lineage.py', acc2taxid_lineage_file,
+	clean_fasta_cmd = ['python ~/bin/JunkDrawer/fast_sweep.py', recruit_fasta_file, clean_fasta_file]
+	build_ref_lineage_cmd = ['python ~/bin/JunkDrawer/build_ref_lineage.py', acc2taxid_lineage_file,
 								clean_fasta_file, run_path
 								]
 	exclude_acc_cmd = ['seqmagick convert', clean_fasta_file, filtered_fasta_file,
