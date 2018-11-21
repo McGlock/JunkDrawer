@@ -29,6 +29,17 @@ def run_cmds(cmds):
 								shell=True, env=my_env)
 				proc.communicate()
 
+def hmm_get_len(hmm):
+	with open(hmm, 'r') as h:
+		data = h.readlines()
+		for line in data:
+			if 'LENG' in line:
+				hmm_l = int(line.split()[-1])
+	return hmm_l
+
+
+# Magic numbers
+len_thresh = 0.8 # no seqs < 80% len of the ref hmm
 
 # number of cores on system
 num_jobs = sys.argv[4] # multiprocessing.cpu_count()
@@ -72,6 +83,8 @@ for file in file_list:
 		ref_hmm_file = join(run_path, run_name + '.ref.hmm')
 	elif '.hmm' in file:
 		ref_hmm_file = file
+	hmm_len = hmm_get_len(ref_hmm_file)
+	len_cutoff = int(hmm_len*len_thresh)
 	recruit_aln_file = join(run_path, run_name + '.recruit.sto')
 	recruit_fasta_file = join(run_path, run_name + '.recruit.fasta')
 	clean_fasta_file = join(run_path, run_name + '.clean.fasta')
@@ -86,7 +99,8 @@ for file in file_list:
 								clean_fasta_file, run_path
 								]
 	exclude_acc_cmd = ['seqmagick convert', clean_fasta_file, filtered_fasta_file,
-						'--exclude-from-file', exclude_acc_file
+						'--exclude-from-file', exclude_acc_file, '--min-ungapped-length',
+						len_cutoff
 						]
 	build_refpkg_cmd = ['~/bin/TreeSAPP/create_treesapp_ref_data.py -i', filtered_fasta_file,
 						'-o', run_path,	'-c', run_name.rsplit('_', 1)[0],
