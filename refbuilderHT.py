@@ -88,30 +88,35 @@ for file in file_list:
 	recruit_aln_file = join(run_path, run_name + '.recruit.sto')
 	recruit_fasta_file = join(run_path, run_name + '.recruit.fasta')
 	clean_fasta_file = join(run_path, run_name + '.clean.fasta')
-	exclude_acc_file = join(run_path, run_name + '.exclude.txt')
+	nolin_acc_file = join(run_path, run_name + '.nolin.txt')
+	taxed_fasta_file = join(run_path, run_name + '.taxed.fasta')
 	filtered_fasta_file = join(run_path, run_name + '.filtered.fasta')
 	align_cmd = ['muscle', '-in', file, '-out', ref_aln_file]
 	hmmbuild_cmd = ['hmmbuild --cpu 4', ref_hmm_file, ref_aln_file]
 	hmmsearch_cmd = ['hmmsearch --cpu 4 -A', recruit_aln_file, ref_hmm_file, ref_db_path]
-	sto2fasta_cmd = ['seqmagick convert --ungap', recruit_aln_file,  recruit_fasta_file]
-	clean_fasta_cmd = ['python ~/bin/JunkDrawer/fast_sweep.py', recruit_fasta_file, clean_fasta_file]
-	build_ref_lineage_cmd = ['python ~/bin/JunkDrawer/build_ref_lineage.py', acc2taxid_lineage_file,
-								clean_fasta_file, run_path
+	sto2fasta_cmd = ['seqmagick convert --ungap --sort length-desc', recruit_aln_file,
+						recruit_fasta_file
+						]
+	clean_fasta_cmd = ['python ~/bin/JunkDrawer/fast_sweep.py', recruit_fasta_file,
+						clean_fasta_file
+						]
+	build_ref_lineage_cmd = ['python ~/bin/JunkDrawer/build_ref_lineage.py',
+								acc2taxid_lineage_file, clean_fasta_file, run_path
 								]
-	exclude_acc_cmd = ['seqmagick convert', clean_fasta_file, filtered_fasta_file,
-						'--exclude-from-file', exclude_acc_file, '--min-ungapped-length',
-						len_cutoff
+	filter_fasta_cmd = ['seqmagick convert', taxed_fasta_file, filtered_fasta_file,
+						'--exclude-from-file', nolin_acc_file, '--min-ungapped-length',
+						str(len_cutoff), '--deduplicate-taxa', '--deduplicate-sequences'
 						]
-	build_refpkg_cmd = ['~/bin/TreeSAPP/create_treesapp_ref_data.py -i', filtered_fasta_file,
-						'-o', run_path,	'-c', run_name.rsplit('_', 1)[0],
-						'-p 0.90 --cluster --trim_align -m prot -T 4 --headless'
-						]
+	#build_refpkg_cmd = ['~/bin/TreeSAPP/create_treesapp_ref_data.py -i', filtered_fasta_file,
+	#					'-o', run_path,	'-c', run_name.rsplit('_', 1)[0],
+	#					'-p 0.90 --cluster --trim_align -m prot -T 4 --headless'
+	#					]
 	if '.fasta' in file:
 		cmds = [run_path, align_cmd, hmmbuild_cmd, hmmsearch_cmd, sto2fasta_cmd,
-				clean_fasta_cmd, build_ref_lineage_cmd, exclude_acc_cmd, build_refpkg_cmd]
+				clean_fasta_cmd, build_ref_lineage_cmd, filter_fasta_cmd] # , build_refpkg_cmd]
 	elif '.hmm' in file:
 		cmds = [run_path, hmmsearch_cmd, sto2fasta_cmd,
-				clean_fasta_cmd, build_ref_lineage_cmd, exclude_acc_cmd, build_refpkg_cmd]
+				clean_fasta_cmd, build_ref_lineage_cmd, filter_fasta_cmd] # , build_refpkg_cmd]
 	cmds_list.append(cmds)
 
 #run_para = Parallel(n_jobs=int(num_jobs))(delayed(run_cmds)(cmds) for cmds in [cmds_list[0]])
