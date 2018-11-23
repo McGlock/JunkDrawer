@@ -12,10 +12,10 @@ def clean_fasta(fasta_in, fasta_out):
 				acc = split_line[0]
 				if '|' in acc:
 					acc = '>' + acc.split('|')[1]
-				new_line = acc + ' ' + '_'.join(split_line[1:])
+				new_line = acc + ' ' + '_'.join(split_line[1:]).strip(' ')
 				o.write(new_line)
 			else:
-				o.write(line)
+				o.write(line.strip(' '))
 
 
 recruit_fasta_file = sys.argv[1]
