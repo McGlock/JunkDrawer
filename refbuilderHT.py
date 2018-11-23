@@ -111,10 +111,10 @@ for file in file_list:
 						'--exclude-from-file', nolin_acc_file, '--min-ungapped-length',
 						str(len_cutoff), '--deduplicate-taxa', '--deduplicate-sequences'
 						]
-	#build_refpkg_cmd = ['~/bin/TreeSAPP/create_treesapp_ref_data.py -i', filtered_fasta_file,
-	#					'-o', run_path,	'-c', run_name.rsplit('_', 1)[0],
-	#					'-p 0.90 --cluster --trim_align -m prot -T 4 --headless'
-	#					]
+	build_refpkg_cmd = ['~/bin/TreeSAPP/create_treesapp_ref_data.py -i', filtered_fasta_file,
+						'-o', run_path,	'-c', run_name.rsplit('_', 1)[0],
+						'-p 0.90 --cluster --trim_align -m prot -T 4 --headless'
+						]
 	if '.fasta' in file:
 		cmds = [run_path, align_cmd, hmmbuild_cmd, hmmsearch_cmd, sto2fasta_cmd,
 				clean_fasta_cmd, build_ref_lineage_cmd, sort_fasta_cmd,
@@ -125,7 +125,6 @@ for file in file_list:
 				filter_fasta_cmd] # , build_refpkg_cmd]
 	cmds_list.append(cmds)
 
-#run_para = Parallel(n_jobs=int(num_jobs))(delayed(run_cmds)(cmds) for cmds in [cmds_list[0]])
 pool = Pool(processes=int(num_jobs))                                                        
 run_multi = pool.map(run_cmds, cmds_list)
 
