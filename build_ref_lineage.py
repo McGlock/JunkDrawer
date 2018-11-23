@@ -61,7 +61,7 @@ with open(taxed_fasta_file , 'w') as t:
 		taxid = str(combine_df[combine_df['accession.version'] == acc_id].iloc[0]['taxid'])
 		lineage = combine_df[combine_df['accession.version'] == acc_id
 								].iloc[0]['full_lineage']
-		new_id = '|'.join([taxid, acc_id])
+		new_id = '|'.join(['>' + taxid, acc_id])
 		new_header = ' '.join([new_id, lineage])
 		new_record = '\n'.join([new_header, seq]) + '\n'
 		t.write(new_record)
