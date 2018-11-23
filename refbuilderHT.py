@@ -118,11 +118,11 @@ for file in file_list:
 	if '.fasta' in file:
 		cmds = [run_path, align_cmd, hmmbuild_cmd, hmmsearch_cmd, sto2fasta_cmd,
 				clean_fasta_cmd, build_ref_lineage_cmd, sort_fasta_cmd,
-				filter_fasta_cmd] # , build_refpkg_cmd]
+				filter_fasta_cmd, build_refpkg_cmd]
 	elif '.hmm' in file:
 		cmds = [run_path, hmmsearch_cmd, sto2fasta_cmd,
 				clean_fasta_cmd, build_ref_lineage_cmd, sort_fasta_cmd,
-				filter_fasta_cmd] # , build_refpkg_cmd]
+				filter_fasta_cmd, build_refpkg_cmd]
 	cmds_list.append(cmds)
 
 pool = Pool(processes=int(num_jobs))                                                        
