@@ -92,6 +92,7 @@ for file in file_list:
 	taxed_fasta_file = join(run_path, run_name + '.taxed.fasta')
 	sorted_fasta_file = join(run_path, run_name + '.sorted.fasta')
 	filtered_fasta_file = join(run_path, run_name + '.filtered.fasta')
+	final_fasta_file = join(run_path, run_name + '.final.fasta')
 	align_cmd = ['muscle', '-in', file, '-out', ref_aln_file]
 	hmmbuild_cmd = ['hmmbuild --cpu 4', ref_hmm_file, ref_aln_file]
 	hmmsearch_cmd = ['hmmsearch --cpu 4 -A', recruit_aln_file, ref_hmm_file, ref_db_path]
@@ -111,7 +112,10 @@ for file in file_list:
 						'--exclude-from-file', nolin_acc_file, '--min-ungapped-length',
 						str(len_cutoff), '--deduplicate-taxa', '--deduplicate-sequences'
 						]
-	build_refpkg_cmd = ['~/bin/TreeSAPP/create_treesapp_ref_data.py -i', filtered_fasta_file,
+	clean_fasta_cmd = ['python ~/bin/JunkDrawer/fast_sweep.py', filtered_fasta_file,
+						final_fasta_file
+						]
+	build_refpkg_cmd = ['~/bin/TreeSAPP/create_treesapp_ref_data.py -i', final_fasta_file,
 						'-o', run_path,	'-c', run_name.rsplit('_', 1)[0],
 						'-p 0.90 --cluster --trim_align -m prot -T 4 --headless'
 						]
