@@ -32,6 +32,7 @@ acc_lin_map_file = sys.argv[1]
 clean_fasta_file = sys.argv[2]
 output_path = sys.argv[3]
 output_file = path.join(output_path, 'accession_id_lineage_map.tsv')
+tax_id_file = clean_fasta_file.split('.')[0] + '.tax_ids.txt'
 nolin_acc_file = clean_fasta_file.split('.')[0] + '.nolin.txt'
 taxed_fasta_file = clean_fasta_file.split('.')[0] + '.taxed.fasta'
 
@@ -52,6 +53,12 @@ for chunk in acc_lin_map_chunk:
 combine_df = pd.concat(df_list)
 sub_df = combine_df[['accession.version', 'full_lineage']]
 sub_df.to_csv(output_file, sep='\t', index=False, header=False)
+sub_df['spp|acc'] = [x[0] + '|' + x[1].split(';')[-1] for x in
+						zip(sub_df['accession.version', 'full_lineage'])
+						]
+sub_df['lineage2genus'] = [x.rsplit(';', 1)[0] for x in sub_df['full_lineage']]
+tax_id_df = sub_df[['spp|acc', 'lineage2genus']].reset_index()
+tax_id_df.to_csv(tax_id_file, sep='\t', header=False)
 
 # Add taxid to the begining of the seq headers
 with open(taxed_fasta_file , 'w') as t:

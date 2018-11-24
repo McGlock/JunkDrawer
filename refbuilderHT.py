@@ -46,12 +46,12 @@ num_jobs = sys.argv[4] # multiprocessing.cpu_count()
 # set paths
 home_path = sys.argv[1]
 file_path = sys.argv[2]
-refpkg_dir = sys.argv[3]
+refpkg_workdir = sys.argv[3]
 ref_db_path = sys.argv[5]
 acc2taxid_lineage_file = sys.argv[6]
 
 # create refpkg directory
-refpkg_path = makedir(home_path, refpkg_dir)
+refpkg_workpath = makedir(home_path, refpkg_workdir)
 if isdir(file_path) == True:
 	file_list = [join(file_path, f) for f in listdir(file_path) 
 					if f.find('.fasta') != -1
@@ -77,7 +77,8 @@ cmds_list = []
 # build command list for build refpkgs from ref fasta list
 for file in file_list:
 	run_name = file.split('/')[-1].split('.')[0]
-	run_path = makedir(refpkg_path, run_name)
+	run_path = makedir(refpkg_workpath, run_name)
+	refpkg_path = makedir(run_path, run_name + '_refpkg')
 	ref_aln_file = join(run_path, run_name + '.ref.aln')
 	if '.fasta' in file:
 		ref_hmm_file = join(run_path, run_name + '.ref.hmm')
@@ -92,8 +93,16 @@ for file in file_list:
 	taxed_fasta_file = join(run_path, run_name + '.taxed.fasta')
 	sorted_fasta_file = join(run_path, run_name + '.sorted.fasta')
 	filtered_fasta_file = join(run_path, run_name + '.filtered.fasta')
-	final_fasta_file = join(run_path, run_name + '.final.fasta')
-	cluster_fasta_file = join(run_path, run_name + '.final.cluster.fasta')
+	clean2_fasta_file = join(run_path, run_name + '.clean2.fasta')
+	cluster_fasta_file = join(run_path, run_name + '.clean2.cluster.fasta')
+	tax_id_file = join(run_path, run_name + '.tax_ids.txt')
+	final_hmm_file = join(refpkg_path, run_name + '.final.hmm')
+	final_tree_file = join(refpkg_path, run_name + '.final.tre')
+	final_aln_file = join(refpkg_path, run_name + '.final.fa')
+	final_tax_id_file = join(refpkg_path, run_name + '.tax_ids.txt')
+
+	# TODO: add all file objects from build_ref_lineage
+
 	align_cmd = ['muscle', '-in', file, '-out', ref_aln_file]
 	hmmbuild_cmd = ['hmmbuild --cpu 4', ref_hmm_file, ref_aln_file]
 	hmmsearch_cmd = ['hmmsearch --cpu 4 -A', recruit_aln_file, ref_hmm_file, ref_db_path]
@@ -113,20 +122,24 @@ for file in file_list:
 						'--exclude-from-file', nolin_acc_file, '--min-ungapped-length',
 						str(len_cutoff), '--deduplicate-taxa', '--deduplicate-sequences'
 						]
-	final_fasta_cmd = ['python ~/bin/JunkDrawer/fast_sweep2.py', filtered_fasta_file,
-						final_fasta_file
+	clean2_fasta_cmd = ['python ~/bin/JunkDrawer/fast_sweep2.py', filtered_fasta_file,
+						clean2_fasta_file
 						]
-	final_ref_lineage_cmd = ['python ~/bin/JunkDrawer/build_ref_lineage.py',
-								acc2taxid_lineage_file, final_fasta_file, run_path
-								]
-	cluster_ref_cmd = ['~/bin/cdhit/cd-hit -i', final_fasta_file, '-o', cluster_fasta_file,
+	cluster_ref_cmd = ['~/bin/cdhit/cd-hit -i', clean2_fasta_file, '-o', cluster_fasta_file,
 						'-c 0.97 -d 0 -M 16000 -T 4'
 						]
+	final_ref_lineage_cmd = ['python ~/bin/JunkDrawer/build_ref_lineage.py',
+								acc2taxid_lineage_file, cluster_fasta_file, run_path
+								]
+	build_ref_aln_cmd = ['muscle', '-in', cluster_fasta_file, '-out', final_aln_file]
+	build_ref_hmm_cmd = ['hmmbuild --cpu 4', final_hmm_file, final_aln_file]
+	build_ref_tree_cmd = ['FastTree -lg', final_aln_file, '>', final_tree_file]
+	cp_tax_id_cmd = ['cp', tax_id_file, final_tax_id_file]
 
-	build_refpkg_cmd = ['~/bin/TreeSAPP/create_treesapp_ref_data.py -i', final_fasta_file,
-						'-o', run_path,	'-c', run_name.rsplit('_', 1)[0],
-						'-p 0.90 --cluster --trim_align -m prot -T 4 --headless'
-						]
+	#build_refpkg_cmd = ['~/bin/TreeSAPP/create_treesapp_ref_data.py -i', clean2_fasta_file,
+	#					'-o', run_path,	'-c', run_name.rsplit('_', 1)[0],
+	#					'-p 0.90 --cluster --trim_align -m prot -T 4 --headless'
+	#					]
 	if '.fasta' in file:
 		cmds = [run_path, align_cmd, hmmbuild_cmd, hmmsearch_cmd, sto2fasta_cmd,
 				clean_fasta_cmd, build_ref_lineage_cmd, sort_fasta_cmd,
@@ -134,8 +147,9 @@ for file in file_list:
 	elif '.hmm' in file:
 		cmds = [run_path, hmmsearch_cmd, sto2fasta_cmd,
 				clean_fasta_cmd, build_ref_lineage_cmd, sort_fasta_cmd,
-				filter_fasta_cmd, final_fasta_cmd, final_ref_lineage_cmd,
-				cluster_ref_cmd] # , build_refpkg_cmd]
+				filter_fasta_cmd, clean2_fasta_cmd, cluster_ref_cmd,
+				final_ref_lineage_cmd, build_ref_aln_cmd, build_ref_hmm_cmd,
+				build_ref_tree_cmd, cp_tax_id_cmd] # , build_refpkg_cmd]
 	cmds_list.append(cmds)
 
 pool = Pool(processes=int(num_jobs))                                                        
