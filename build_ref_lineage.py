@@ -53,12 +53,12 @@ for chunk in acc_lin_map_chunk:
 combine_df = pd.concat(df_list)
 sub_df = combine_df[['accession.version', 'full_lineage']]
 sub_df.to_csv(output_file, sep='\t', index=False, header=False)
-sub_df['spp|acc'] = [x[1].split(';')[-1] + '|' + x[0] for x in
+sub_df['spp | acc'] = [x[1].split(';')[-1] + ' | ' + x[0] for x in
 						zip(sub_df['accession.version'], sub_df['full_lineage'])
 						]
 sub_df['lineage2genus'] = [x.rsplit(';', 1)[0] for x in sub_df['full_lineage']]
 sub_df = sub_df.reset_index()
-tax_id_df = sub_df[['spp|acc', 'lineage2genus']]
+tax_id_df = sub_df[['spp | acc', 'lineage2genus']]
 tax_id_df.to_csv(tax_id_file, sep='\t', header=False)
 
 # Add taxid to the begining of the seq headers

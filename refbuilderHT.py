@@ -96,6 +96,7 @@ for file in file_list:
 	clean2_fasta_file = join(run_path, run_name + '.clean2.fasta')
 	cluster_fasta_file = join(run_path, run_name + '.clean2.cluster.fasta')
 	tax_id_file = join(run_path, run_name + '.tax_ids.txt')
+	clean3_fasta_file = join(run_path, run_name + '.clean3.fasta')
 	final_hmm_file = join(refpkg_path, run_name + '.final.hmm')
 	final_tree_file = join(refpkg_path, run_name + '.final.tre')
 	final_aln_file = join(refpkg_path, run_name + '.final.fa')
@@ -131,7 +132,10 @@ for file in file_list:
 	final_ref_lineage_cmd = ['python ~/bin/JunkDrawer/build_ref_lineage.py',
 								acc2taxid_lineage_file, cluster_fasta_file, run_path
 								]
-	build_ref_aln_cmd = ['muscle', '-in', cluster_fasta_file, '-out', final_aln_file]
+	clean3_fasta_cmd = ['python ~/bin/JunkDrawer/fast_sweep3.py', cluster_fasta_file,
+						clean3_fasta_file, tax_id_file
+						]
+	build_ref_aln_cmd = ['muscle', '-in', clean3_fasta_file, '-out', final_aln_file]
 	build_ref_hmm_cmd = ['hmmbuild --cpu 4', final_hmm_file, final_aln_file]
 	build_ref_tree_cmd = ['FastTree -lg', final_aln_file, '>', final_tree_file]
 	cp_tax_id_cmd = ['cp', tax_id_file, final_tax_id_file]
@@ -148,8 +152,8 @@ for file in file_list:
 		cmds = [run_path, hmmsearch_cmd, sto2fasta_cmd,
 				clean_fasta_cmd, build_ref_lineage_cmd, sort_fasta_cmd,
 				filter_fasta_cmd, clean2_fasta_cmd, cluster_ref_cmd,
-				final_ref_lineage_cmd, build_ref_aln_cmd, build_ref_hmm_cmd,
-				build_ref_tree_cmd, cp_tax_id_cmd] # , build_refpkg_cmd]
+				final_ref_lineage_cmd, clean3_fasta_cmd, build_ref_aln_cmd,
+				build_ref_hmm_cmd, build_ref_tree_cmd, cp_tax_id_cmd] # , build_refpkg_cmd]
 	cmds_list.append(cmds)
 
 pool = Pool(processes=int(num_jobs))                                                        
