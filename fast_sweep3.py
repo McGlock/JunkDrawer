@@ -6,7 +6,7 @@ import pandas as pd
 def clean_fasta(fasta_in, fasta_out, tax_id_file):
 
 	tax_id_df = pd.read_csv(tax_id_file, sep='\t', names=['ID', 'spp | acc', 'lineage'])
-	tax_id_df['acc'] = [x.split('|')[1] for x in tax_id_df['spp | acc']]
+	tax_id_df['acc'] = [x.split(' | ')[1] for x in tax_id_df['spp | acc']]
 	with open(fasta_in, 'r') as i:
 		data = i.readlines()
 	with open(fasta_out, 'w') as o:
