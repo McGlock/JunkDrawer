@@ -1,96 +1,113 @@
 import sys
 from itertools import islice
 import csv
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+import pandas as pd
+import matplotlib
+matplotlib.use('agg')
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 
 
 def tetra_cnt(seq_list):
-	tetra_cnt_dict = {'aaaa': 0, 'aaat': 0, 'aaag': 0, 'aaac': 0, 'aata': 0,
-					'aatt': 0, 'aatg': 0, 'aatc': 0, 'aaga': 0, 'aagt': 0,
-					'aagg': 0, 'aagc': 0, 'aaca': 0, 'aact': 0, 'aacg': 0,
-					'aacc': 0, 'ataa': 0, 'atat': 0, 'atag': 0, 'atac': 0,
-					'atta': 0, 'attt': 0, 'attg': 0, 'attc': 0, 'atga': 0,
-					'atgt': 0, 'atgg': 0, 'atgc': 0, 'atca': 0, 'atct': 0, 
-					'atcg': 0, 'atcc': 0, 'agaa': 0, 'agat': 0, 'agag': 0,
-					'agac': 0, 'agta': 0, 'agtt': 0, 'agtg': 0, 'agtc': 0,
-					'agga': 0, 'aggt': 0, 'aggg': 0, 'aggc': 0, 'agca': 0,
-					'agct': 0, 'agcg': 0, 'agcc': 0, 'acaa': 0, 'acat': 0,
-					'acag': 0, 'acac': 0, 'acta': 0, 'actt': 0, 'actg': 0,
-					'actc': 0, 'acga': 0, 'acgt': 0, 'acgg': 0, 'acgc': 0, 
-					'acca': 0, 'acct': 0, 'accg': 0, 'accc': 0, 'taaa': 0,
-					'taat': 0, 'taag': 0, 'taac': 0, 'tata': 0, 'tatt': 0,
-					'tatg': 0, 'tatc': 0, 'taga': 0, 'tagt': 0, 'tagg': 0,
-					'tagc': 0, 'taca': 0, 'tact': 0, 'tacg': 0, 'tacc': 0,
-					'ttaa': 0, 'ttat': 0, 'ttag': 0, 'ttac': 0, 'ttta': 0,
-					'tttt': 0, 'tttg': 0, 'tttc': 0, 'ttga': 0, 'ttgt': 0, 
-					'ttgg': 0, 'ttgc': 0, 'ttca': 0, 'ttct': 0, 'ttcg': 0,
-					'ttcc': 0, 'tgaa': 0, 'tgat': 0, 'tgag': 0, 'tgac': 0,
-					'tgta': 0, 'tgtt': 0, 'tgtg': 0, 'tgtc': 0, 'tgga': 0,
-					'tggt': 0, 'tggg': 0, 'tggc': 0, 'tgca': 0, 'tgct': 0,
-					'tgcg': 0, 'tgcc': 0, 'tcaa': 0, 'tcat': 0, 'tcag': 0,
-					'tcac': 0, 'tcta': 0, 'tctt': 0, 'tctg': 0, 'tctc': 0, 
-					'tcga': 0, 'tcgt': 0, 'tcgg': 0, 'tcgc': 0, 'tcca': 0,
-					'tcct': 0, 'tccg': 0, 'tccc': 0, 'gaaa': 0, 'gaat': 0,
-					'gaag': 0, 'gaac': 0, 'gata': 0, 'gatt': 0, 'gatg': 0,
-					'gatc': 0, 'gaga': 0, 'gagt': 0, 'gagg': 0, 'gagc': 0,
-					'gaca': 0, 'gact': 0, 'gacg': 0, 'gacc': 0, 'gtaa': 0,
-					'gtat': 0, 'gtag': 0, 'gtac': 0, 'gtta': 0, 'gttt': 0, 
-					'gttg': 0, 'gttc': 0, 'gtga': 0, 'gtgt': 0, 'gtgg': 0,
-					'gtgc': 0, 'gtca': 0, 'gtct': 0, 'gtcg': 0, 'gtcc': 0,
-					'ggaa': 0, 'ggat': 0, 'ggag': 0, 'ggac': 0, 'ggta': 0,
-					'ggtt': 0, 'ggtg': 0, 'ggtc': 0, 'ggga': 0, 'gggt': 0,
-					'gggg': 0, 'gggc': 0, 'ggca': 0, 'ggct': 0, 'ggcg': 0,
-					'ggcc': 0, 'gcaa': 0, 'gcat': 0, 'gcag': 0, 'gcac': 0, 
-					'gcta': 0, 'gctt': 0, 'gctg': 0, 'gctc': 0, 'gcga': 0,
-					'gcgt': 0, 'gcgg': 0, 'gcgc': 0, 'gcca': 0, 'gcct': 0,
-					'gccg': 0, 'gccc': 0, 'caaa': 0, 'caat': 0, 'caag': 0,
-					'caac': 0, 'cata': 0, 'catt': 0, 'catg': 0, 'catc': 0,
-					'caga': 0, 'cagt': 0, 'cagg': 0, 'cagc': 0, 'caca': 0,
-					'cact': 0, 'cacg': 0, 'cacc': 0, 'ctaa': 0, 'ctat': 0, 
-					'ctag': 0, 'ctac': 0, 'ctta': 0, 'cttt': 0, 'cttg': 0,
-					'cttc': 0, 'ctga': 0, 'ctgt': 0, 'ctgg': 0, 'ctgc': 0,
-					'ctca': 0, 'ctct': 0, 'ctcg': 0, 'ctcc': 0, 'cgaa': 0,
-					'cgat': 0, 'cgag': 0, 'cgac': 0, 'cgta': 0, 'cgtt': 0,
-					'cgtg': 0, 'cgtc': 0, 'cgga': 0, 'cggt': 0, 'cggg': 0,
-					'cggc': 0, 'cgca': 0, 'cgct': 0, 'cgcg': 0, 'cgcc': 0, 
-					'ccaa': 0, 'ccat': 0, 'ccag': 0, 'ccac': 0, 'ccta': 0, 
-					'cctt': 0, 'cctg': 0, 'cctc': 0, 'ccga': 0, 'ccgt': 0,
-					'ccgg': 0, 'ccgc': 0, 'ccca': 0, 'ccct': 0, 'cccg': 0,
-					'cccc': 0
+	tetra_cnt_dict = {'aaaa': [], 'aaat': [], 'aaag': [], 'aaac': [], 'aata': [],
+					'aatt': [], 'aatg': [], 'aatc': [], 'aaga': [], 'aagt': [],
+					'aagg': [], 'aagc': [], 'aaca': [], 'aact': [], 'aacg': [],
+					'aacc': [], 'ataa': [], 'atat': [], 'atag': [], 'atac': [],
+					'atta': [], 'attt': [], 'attg': [], 'attc': [], 'atga': [],
+					'atgt': [], 'atgg': [], 'atgc': [], 'atca': [], 'atct': [], 
+					'atcg': [], 'atcc': [], 'agaa': [], 'agat': [], 'agag': [],
+					'agac': [], 'agta': [], 'agtt': [], 'agtg': [], 'agtc': [],
+					'agga': [], 'aggt': [], 'aggg': [], 'aggc': [], 'agca': [],
+					'agct': [], 'agcg': [], 'agcc': [], 'acaa': [], 'acat': [],
+					'acag': [], 'acac': [], 'acta': [], 'actt': [], 'actg': [],
+					'actc': [], 'acga': [], 'acgt': [], 'acgg': [], 'acgc': [], 
+					'acca': [], 'acct': [], 'accg': [], 'accc': [], 'taaa': [],
+					'taat': [], 'taag': [], 'taac': [], 'tata': [], 'tatt': [],
+					'tatg': [], 'tatc': [], 'taga': [], 'tagt': [], 'tagg': [],
+					'tagc': [], 'taca': [], 'tact': [], 'tacg': [], 'tacc': [],
+					'ttaa': [], 'ttat': [], 'ttag': [], 'ttac': [], 'ttta': [],
+					'tttt': [], 'tttg': [], 'tttc': [], 'ttga': [], 'ttgt': [], 
+					'ttgg': [], 'ttgc': [], 'ttca': [], 'ttct': [], 'ttcg': [],
+					'ttcc': [], 'tgaa': [], 'tgat': [], 'tgag': [], 'tgac': [],
+					'tgta': [], 'tgtt': [], 'tgtg': [], 'tgtc': [], 'tgga': [],
+					'tggt': [], 'tggg': [], 'tggc': [], 'tgca': [], 'tgct': [],
+					'tgcg': [], 'tgcc': [], 'tcaa': [], 'tcat': [], 'tcag': [],
+					'tcac': [], 'tcta': [], 'tctt': [], 'tctg': [], 'tctc': [], 
+					'tcga': [], 'tcgt': [], 'tcgg': [], 'tcgc': [], 'tcca': [],
+					'tcct': [], 'tccg': [], 'tccc': [], 'gaaa': [], 'gaat': [],
+					'gaag': [], 'gaac': [], 'gata': [], 'gatt': [], 'gatg': [],
+					'gatc': [], 'gaga': [], 'gagt': [], 'gagg': [], 'gagc': [],
+					'gaca': [], 'gact': [], 'gacg': [], 'gacc': [], 'gtaa': [],
+					'gtat': [], 'gtag': [], 'gtac': [], 'gtta': [], 'gttt': [], 
+					'gttg': [], 'gttc': [], 'gtga': [], 'gtgt': [], 'gtgg': [],
+					'gtgc': [], 'gtca': [], 'gtct': [], 'gtcg': [], 'gtcc': [],
+					'ggaa': [], 'ggat': [], 'ggag': [], 'ggac': [], 'ggta': [],
+					'ggtt': [], 'ggtg': [], 'ggtc': [], 'ggga': [], 'gggt': [],
+					'gggg': [], 'gggc': [], 'ggca': [], 'ggct': [], 'ggcg': [],
+					'ggcc': [], 'gcaa': [], 'gcat': [], 'gcag': [], 'gcac': [], 
+					'gcta': [], 'gctt': [], 'gctg': [], 'gctc': [], 'gcga': [],
+					'gcgt': [], 'gcgg': [], 'gcgc': [], 'gcca': [], 'gcct': [],
+					'gccg': [], 'gccc': [], 'caaa': [], 'caat': [], 'caag': [],
+					'caac': [], 'cata': [], 'catt': [], 'catg': [], 'catc': [],
+					'caga': [], 'cagt': [], 'cagg': [], 'cagc': [], 'caca': [],
+					'cact': [], 'cacg': [], 'cacc': [], 'ctaa': [], 'ctat': [], 
+					'ctag': [], 'ctac': [], 'ctta': [], 'cttt': [], 'cttg': [],
+					'cttc': [], 'ctga': [], 'ctgt': [], 'ctgg': [], 'ctgc': [],
+					'ctca': [], 'ctct': [], 'ctcg': [], 'ctcc': [], 'cgaa': [],
+					'cgat': [], 'cgag': [], 'cgac': [], 'cgta': [], 'cgtt': [],
+					'cgtg': [], 'cgtc': [], 'cgga': [], 'cggt': [], 'cggg': [],
+					'cggc': [], 'cgca': [], 'cgct': [], 'cgcg': [], 'cgcc': [], 
+					'ccaa': [], 'ccat': [], 'ccag': [], 'ccac': [], 'ccta': [], 
+					'cctt': [], 'cctg': [], 'cctc': [], 'ccga': [], 'ccgt': [],
+					'ccgg': [], 'ccgc': [], 'ccca': [], 'ccct': [], 'cccg': [],
+					'cccc': []
 					}  # build empty dict or tetranucleotide counting
 
 	# count up all kmers and also populate the tetra dict
-	total_kmer_cnt = 0
 	for seq in seq_list:
+		tmp_dict = {k: 0 for k, v in tetra_cnt_dict.items()}
+		total_kmer_cnt = 0
 		clean_seq = seq.strip('\n').lower()
 		kmer_list = [''.join(x) for x in get_tetra(clean_seq)]
-		for tetra in tetra_cnt_dict.keys():
+		for tetra in tmp_dict.keys():
 			count_tetra = kmer_list.count(tetra)
-			tetra_cnt_dict[tetra] += count_tetra
+			tmp_dict[tetra] = count_tetra
 			total_kmer_cnt += count_tetra
-	# map tetras to their reverse tetras (not compliment)
-	dedup_dict = {}
-	for tetra in tetra_cnt_dict.keys():
-		if (tetra not in dedup_dict.keys()) & (tetra[::-1] not in dedup_dict.keys()):
-			dedup_dict[tetra] = ''
-		elif tetra[::-1] in dedup_dict.keys():
-			dedup_dict[tetra[::-1]] = tetra
-	# combine the tetras and their reverse (not compliment), convert to proportions
-	tetra_prop_dict = {}
-	summed_tetras = 0
-	for tetra in dedup_dict.keys():
-		if dedup_dict[tetra] != '':
-			t_prop = (tetra_cnt_dict[tetra] 
-						+ tetra_cnt_dict[dedup_dict[tetra]]) / total_kmer_cnt
-			tetra_prop_dict[tetra] = t_prop
-			summed_tetras += t_prop 
-		else:
-			t_prop = tetra_cnt_dict[tetra] / total_kmer_cnt
-			tetra_prop_dict[tetra] = t_prop
-			summed_tetras += t_prop
-	return tetra_prop_dict
+		# map tetras to their reverse tetras (not compliment)
+		dedup_dict = {}
+		for tetra in tmp_dict.keys():
+			if (tetra not in dedup_dict.keys()) & (tetra[::-1] not in dedup_dict.keys()):
+				dedup_dict[tetra] = ''
+			elif tetra[::-1] in dedup_dict.keys():
+				dedup_dict[tetra[::-1]] = tetra
+		# combine the tetras and their reverse (not compliment), convert to proportions
+		tetra_prop_dict = {}
+		summed_tetras = 0
+		for tetra in dedup_dict.keys():
+			if dedup_dict[tetra] != '':
+				t_prop = (tmp_dict[tetra] 
+							+ tmp_dict[dedup_dict[tetra]]) / total_kmer_cnt
+				tetra_prop_dict[tetra] = t_prop
+				summed_tetras += t_prop 
+			else:
+				t_prop = tmp_dict[tetra] / total_kmer_cnt
+				tetra_prop_dict[tetra] = t_prop
+				summed_tetras += t_prop
+		# add to tetra_cnt_dict
+		for k in tetra_cnt_dict.keys():
+			if k in tetra_prop_dict.keys():
+				tetra_cnt_dict[k].append(tetra_prop_dict[k])
+			else:
+				tetra_cnt_dict[k].append(0.0)
+	# convert the final dict into a pd dataframe for ease
+	tetra_cnt_df = pd.DataFrame.from_dict(tetra_cnt_dict)
+	dedupped_df = tetra_cnt_df.loc[:, (tetra_cnt_df != 0.0).any(axis=0)]
+	return dedupped_df
 
-def get_tetra(seq, n=4):
+def get_tetra(seq, n=4):  # found on internet
     "Returns a sliding window (of width n) over data from the iterable"
     "   s -> (s0,s1,...s[n-1]), (s1,s2,...,sn), ...                   "
     it = iter(seq)
@@ -102,15 +119,57 @@ def get_tetra(seq, n=4):
         yield result
 
 
+### Start Main ###
+sag_fasta = sys.argv[1]
+mg_fasta = sys.argv[2]
 
-fasta_file = sys.argv[1]
+# Process the SAG fasta
+sag_contigs = []
+with open(sag_fasta, 'r') as f:
+	data = f.read()
+	split_data = data.split('>')
+	for reccord in split_data:
+		split_rec = reccord.split('\n')
+		seq = ''.join(split_rec[1:])
+		if seq != '':
+			sag_contigs.append(seq)
+sag_tetra_df = pd.DataFrame.from_dict(tetra_cnt(sag_contigs))
+sag_tetra_df['contig_id'] = ['sag_0' for x in sag_tetra_df.index]
+sag_tetra_df.set_index('contig_id', inplace=True)
+print(sag_tetra_df.head())
+print('SAG tetranucleotide frequencies calculated')
 
-contig_list = []
-with open(fasta_file, 'r') as f:
-	data = f.readlines()
-	for line in data:
-		if '>' not in line:
-			contig_list.append(line.strip('\n').lower())
+# Process the MetaG fasta
+mg_contigs = []
+with open(mg_fasta, 'r') as f:
+	data = f.read()
+	split_data = data.split('>')
+	for reccord in split_data:
+		split_rec = reccord.split('\n')
+		seq = ''.join(split_rec[1:])
+		if seq != '':
+			mg_contigs.append(seq)
+mg_tetra_df = pd.DataFrame.from_dict(tetra_cnt(mg_contigs))
+mg_tetra_df['contig_id'] = ['contig_0' for x in mg_tetra_df.index]
+mg_tetra_df.set_index('contig_id', inplace=True)
+print(mg_tetra_df.head())
+print('Metagenome tetranucleotide frequencies calculated')
 
-tetra_count_dict = tetra_cnt(contig_list)
-print(tetra_count_dict)
+concat_df = pd.concat([sag_tetra_df, mg_tetra_df])
+print(concat_df.shape)
+
+# Don't need to scale tetra Hz data, I think?
+
+# PCA
+features = concat_df.values
+targets = concat_df.index.values
+pca = PCA(n_components=2)
+principalComponents = pca.fit_transform(features)
+pc_df = pd.DataFrame(data = principalComponents
+             , columns = ['principal component 1', 'principal component 2'])
+final_df = pc_df.set_index(concat_df.index)
+print(final_df.head())
+
+ax = sns.scatterplot(x="principal component 1", y="principal component 2",
+						hue=final_df.index, data=final_df)
+plt.savefig('output.png')
