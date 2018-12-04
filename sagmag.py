@@ -1,8 +1,10 @@
 import sys
 from itertools import islice
+import csv
 
 
-def tetra_freq(seq_list):
+
+def tetra_cnt(seq_list):
 	tetra_cnt_dict = {'aaaa': 0, 'aaat': 0, 'aaag': 0, 'aaac': 0, 'aata': 0,
 					'aatt': 0, 'aatg': 0, 'aatc': 0, 'aaga': 0, 'aagt': 0,
 					'aagg': 0, 'aagc': 0, 'aaca': 0, 'aact': 0, 'aacg': 0,
@@ -55,14 +57,38 @@ def tetra_freq(seq_list):
 					'cctt': 0, 'cctg': 0, 'cctc': 0, 'ccga': 0, 'ccgt': 0,
 					'ccgg': 0, 'ccgc': 0, 'ccca': 0, 'ccct': 0, 'cccg': 0,
 					'cccc': 0
-					}
+					}  # build empty dict or tetranucleotide counting
+
+	# count up all kmers and also populate the tetra dict
+	total_kmer_cnt = 0
 	for seq in seq_list:
-		kmer_list = get_tetra(seq)
-		for kmer in kmer_list:
-			print(kmer)
-			### START HERE ###
-			tetra_cnt_dict[kmer] += tetra_cnt_dict[kmer]
-	return tetra_cnt_dict
+		clean_seq = seq.strip('\n').lower()
+		kmer_list = [''.join(x) for x in get_tetra(clean_seq)]
+		for tetra in tetra_cnt_dict.keys():
+			count_tetra = kmer_list.count(tetra)
+			tetra_cnt_dict[tetra] += count_tetra
+			total_kmer_cnt += count_tetra
+	# map tetras to their reverse tetras (not compliment)
+	dedup_dict = {}
+	for tetra in tetra_cnt_dict.keys():
+		if (tetra not in dedup_dict.keys()) & (tetra[::-1] not in dedup_dict.keys()):
+			dedup_dict[tetra] = ''
+		elif tetra[::-1] in dedup_dict.keys():
+			dedup_dict[tetra[::-1]] = tetra
+	# combine the tetras and their reverse (not compliment), convert to proportions
+	tetra_prop_dict = {}
+	summed_tetras = 0
+	for tetra in dedup_dict.keys():
+		if dedup_dict[tetra] != '':
+			t_prop = (tetra_cnt_dict[tetra] 
+						+ tetra_cnt_dict[dedup_dict[tetra]]) / total_kmer_cnt
+			tetra_prop_dict[tetra] = t_prop
+			summed_tetras += t_prop 
+		else:
+			t_prop = tetra_cnt_dict[tetra] / total_kmer_cnt
+			tetra_prop_dict[tetra] = t_prop
+			summed_tetras += t_prop
+	return tetra_prop_dict
 
 def get_tetra(seq, n=4):
     "Returns a sliding window (of width n) over data from the iterable"
@@ -86,5 +112,5 @@ with open(fasta_file, 'r') as f:
 		if '>' not in line:
 			contig_list.append(line.strip('\n').lower())
 
-fequencies = tetra_freq(contig_list)
-print(fequencies)
+tetra_count_dict = tetra_cnt(contig_list)
+print(tetra_count_dict)
