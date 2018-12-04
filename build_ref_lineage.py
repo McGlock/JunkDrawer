@@ -65,9 +65,9 @@ if not Path(missing_lin_map_custom_file).is_file():
 	missing_lin_df.to_csv(missing_lin_map_custom_file, sep='\t', header=True, index=False)
 sub_df = combine_df[['accession.version', 'full_lineage']]
 sub_df.to_csv(output_file, sep='\t', index=False, header=False)
-for x in zip(sub_df['accession.version'], sub_df['full_lineage']):
-	print(x)
-	print(x[1].split(';')[-1] + ' | ' + x[0])
+#for x in zip(sub_df['accession.version'], sub_df['full_lineage']):
+#	print(x)
+#	print(x[1].split(';')[-1] + ' | ' + x[0])
 sub_df['spp | acc'] = [x[1].split(';')[-1] + ' | ' + x[0] for x in
 						zip(sub_df['accession.version'], sub_df['full_lineage'])
 						]
@@ -81,13 +81,14 @@ with open(taxed_fasta_file , 'w') as t:
 	for k, v in fasta_dict.items():
 		acc_id = k
 		header, seq = v
-		taxid = str(combine_df[combine_df['accession.version'] == acc_id].iloc[0]['taxid'])
-		lineage = combine_df[combine_df['accession.version'] == acc_id
-								].iloc[0]['full_lineage']
-		new_id = '|'.join(['>' + taxid, acc_id])
-		#new_header = ' '.join([new_id, lineage])
-		new_record = '\n'.join([new_id, seq])
-		t.write(new_record)
+		if acc_id in list(combine_df['accession.version']):
+			taxid = str(combine_df[combine_df['accession.version'] == acc_id].iloc[0]['taxid'])
+			lineage = combine_df[combine_df['accession.version'] == acc_id
+									].iloc[0]['full_lineage']
+			new_id = '|'.join(['>' + taxid, acc_id])
+			#new_header = ' '.join([new_id, lineage])
+			new_record = '\n'.join([new_id, seq])
+			t.write(new_record)
 
 # Check if there are any accessions that didn't get lineage map
 nolin_acc_list = []

@@ -33,7 +33,7 @@ bad_dir=$output_dir/bad_name_bins
 rpkm_f=$prefix_dir/${sid}_binned.rpkm.csv
 header_map=$output_dir/binned_header_map.tsv
 checkm_stats=$output_dir/MetaBAT2_${sid}_min${min_length}_checkM_stdout.tsv
-
+: '
 # Ensure the prefix is not too long - essential for compatibility with Prokka
 if [ $(echo $sid| wc -c ) -gt 21 ]; then
 	echo "ERROR: 'prefix_name' ($sid) must be shorter than 20 characters! Exiting now."
@@ -108,7 +108,7 @@ if [ ! -f $bin_input_contigs ]; then
 fi
 
 ###################################################################################################
-# Calculate each contig's abundance across samples for MetaBAT
+# Calculate each contigs abundance across samples for MetaBAT
 ###################################################################################################
 if [ ! -f $abunds ]; then	
 	printf "[STATUS] Indexing $bin_input_contigs ... "
@@ -144,7 +144,7 @@ if [ ! -f $abunds ]; then
 else
 	echo "[INFO] Using the abundance profiles found in $abunds"
 fi
-
+'
 ###################################################################################################
 # Bin the reference metagenome using MetaBAT2
 ###################################################################################################
@@ -191,12 +191,16 @@ if [ ! -d $output_dir ]; then
 	printf "[STATUS] Tar-balling raw MetaBAT MAGs... "
 	mkdir $output_dir/Raw_MAGs/
 	mv $output_dir/$sid\_raw.*fa $output_dir/Raw_MAGs/
-	cd $output_dir/
-	tar -czf $output_dir/Raw_MAGs.tar.gz Raw_MAGs/
+	#cd $output_dir/
+	tar -czf $output_dir/Raw_MAGs.tar.gz $output_dir/Raw_MAGs/
 	rm -r $output_dir/Raw_MAGs/
 	printf "done.\n"
-	cd -
+	#cd -
 fi
+
+# remove empty bins files caused by Minimus2 failure (RJM)
+find $output_dir -size  0 -print0 |xargs -0 rm --
+
 ##################################################
 
 ###################################################################################################
@@ -284,18 +288,18 @@ rm $prefix_dir/binned_sequences.*.sam $output_dir/binned_sequences.fasta*
 # Split the wheat from the chaff, archiving the low-quality MAGs
 ###################################################################################################
 printf "[STATUS] Archiving low quality MAGs... "
-cd $output_dir
-mkdir MedQPlus_MAGs/
-mkdir LowQ_MAGs/
+#cd $output_dir
+mkdir $output_dir/MedQPlus_MAGs/
+mkdir $output_dir/LowQ_MAGs/
 for f in $(gawk -F"\t" '{ if ($12>50 && $13<10) print $1 }' $checkm_stats)
 do
-	mv $f.fa MedQPlus_MAGs/
+	mv $f.fa $output_dir/MedQPlus_MAGs/
 done
-mv *.fa LowQ_MAGs/
-tar -czf LowQ_MAGs.tar.gz LowQ_MAGs/
-rm -r LowQ_MAGs/
+mv *.fa $output_dir/LowQ_MAGs/
+tar -czf $output_dir/LowQ_MAGs.tar.gz $output_dir/LowQ_MAGs/
+rm -r $output_dir/LowQ_MAGs/
 printf "done.\n"
-cd -
+#cd -
 
 ##################################################
 
