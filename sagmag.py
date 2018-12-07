@@ -150,17 +150,9 @@ def plot_umap(df, n_neighbors=15, min_dist=0.1,
 	colors = ['r', 'g', 'b']
 	color_list = [colors[x[0]] for x in enumerate(set(targets))]
 
-	u = fit.fit_transform(features);
-	fig = plt.figure()
-	if n_components == 1:
-		ax = fig.add_subplot(111)
-		ax.scatter(u[:,0], range(len(u)), color=color_list)
-	if n_components == 2:
-		ax = fig.add_subplot(111)
-		ax.scatter(u[:,0], u[:,1], color=color_list)
-	if n_components == 3:
-		ax = fig.add_subplot(111, projection='3d')
-		ax.scatter(u[:,0], u[:,1], u[:,2], color=color_list, s=100)
+	embedding = fit.fit_transform(features)
+	ax = sns.scatterplot(x=embedding[:, 0], y=embedding[:, 1], hue=targets)
+	plt.gca().set_aspect('equal', 'datalim')
 	plt.title(title, fontsize=18)
 	plot_file_name = '_'.join([str(n_neighbors), str(min_dist),
 								str(n_components), metric]) + '.png'
@@ -168,6 +160,9 @@ def plot_umap(df, n_neighbors=15, min_dist=0.1,
 	plt.clf()
 
 
+#plt.title('UMAP projection of SAG and MetaG contigs', fontsize=24)
+#plt.savefig('UMAP_plot.png')
+#plt.clf()
 
 ### Start Main ###
 sag_fasta = sys.argv[1]
@@ -255,10 +250,6 @@ for n in (2, 5, 10, 20, 50, 100, 200):
 	plot_umap(concat_df, n_neighbors=n, title='n_neighbors = {}'.format(n))
 for d in (0.0, 0.1, 0.25, 0.5, 0.8, 0.99):
     plot_umap(concat_df, min_dist=d, title='min_dist = {}'.format(d))
-
-plot_umap(concat_df, n_components=1, title='n_components = 1')
-plot_umap(concat_df, n_components=2, title='n_components = 2')
-plot_umap(concat_df, n_components=3, title='n_components = 3')
 
 #features = concat_df.values
 #targets = concat_df.index.values
