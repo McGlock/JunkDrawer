@@ -85,17 +85,16 @@ def tetra_cnt(seq_list):
 				dedup_dict[tetra[::-1]] = tetra
 		# combine the tetras and their reverse (not compliment), convert to proportions
 		tetra_prop_dict = {}
-		summed_tetras = 0
 		for tetra in dedup_dict.keys():
 			if dedup_dict[tetra] != '':
-				t_prop = (tmp_dict[tetra] 
-							+ tmp_dict[dedup_dict[tetra]]) / total_kmer_cnt
-				tetra_prop_dict[tetra] = t_prop
-				summed_tetras += t_prop 
+				tetra_prop_dict[tetra] = tmp_dict[tetra] + tmp_dict[dedup_dict[tetra]]
+				#t_prop = (tmp_dict[tetra] 
+				#			+ tmp_dict[dedup_dict[tetra]]) / total_kmer_cnt
+				#tetra_prop_dict[tetra] = t_prop
 			else:
-				t_prop = tmp_dict[tetra] / total_kmer_cnt
-				tetra_prop_dict[tetra] = t_prop
-				summed_tetras += t_prop
+				tetra_prop_dict[tetra] = tmp_dict[tetra]
+				#t_prop = tmp_dict[tetra] / total_kmer_cnt
+				#tetra_prop_dict[tetra] = t_prop
 		# add to tetra_cnt_dict
 		for k in tetra_cnt_dict.keys():
 			if k in tetra_prop_dict.keys():
@@ -163,8 +162,10 @@ print(concat_df.shape)
 # PCA
 features = concat_df.values
 targets = concat_df.index.values
+x = StandardScaler().fit_transform(features)
+
 pca = PCA(n_components=2)
-principalComponents = pca.fit_transform(features)
+principalComponents = pca.fit_transform(x)
 pc_df = pd.DataFrame(data = principalComponents
              , columns = ['principal component 1', 'principal component 2'])
 final_df = pc_df.set_index(concat_df.index)

@@ -1,5 +1,6 @@
 #!/bin/bash
 
+
 if [ $# -lt 6 ]; then
         echo -e "\n\tUSAGE: assembly_list.txt reads_list.txt interleaved[y|n] output_dir prefix_name n_threads\n"
 	echo "'assembly_list.txt' is a file listing the FASTA files containing contigs to be binned."
@@ -33,7 +34,7 @@ bad_dir=$output_dir/bad_name_bins
 rpkm_f=$prefix_dir/${sid}_binned.rpkm.csv
 header_map=$output_dir/binned_header_map.tsv
 checkm_stats=$output_dir/MetaBAT2_${sid}_min${min_length}_checkM_stdout.tsv
-: '
+
 # Ensure the prefix is not too long - essential for compatibility with Prokka
 if [ $(echo $sid| wc -c ) -gt 21 ]; then
 	echo "ERROR: 'prefix_name' ($sid) must be shorter than 20 characters! Exiting now."
@@ -144,7 +145,7 @@ if [ ! -f $abunds ]; then
 else
 	echo "[INFO] Using the abundance profiles found in $abunds"
 fi
-'
+
 ###################################################################################################
 # Bin the reference metagenome using MetaBAT2
 ###################################################################################################
@@ -250,7 +251,6 @@ printf "done.\n"
 
 ##################################################
 
-
 ###################################################################################################
 # Calculate RPKM for all binned contigs
 ###################################################################################################
@@ -282,6 +282,7 @@ while read line; do
 	rm $prefix_dir/$sid\_binned.$fq_sid.rpkm.csv
 	printf "done.\n"
 done<$reads_list
+
 rm $prefix_dir/binned_sequences.*.sam $output_dir/binned_sequences.fasta*
 
 ###################################################################################################
@@ -293,9 +294,9 @@ mkdir $output_dir/MedQPlus_MAGs/
 mkdir $output_dir/LowQ_MAGs/
 for f in $(gawk -F"\t" '{ if ($12>50 && $13<10) print $1 }' $checkm_stats)
 do
-	mv $f.fa $output_dir/MedQPlus_MAGs/
+	mv $output_dir/$f.fa $output_dir/MedQPlus_MAGs/
 done
-mv *.fa $output_dir/LowQ_MAGs/
+mv $output_dir/*.fa $output_dir/LowQ_MAGs/
 tar -czf $output_dir/LowQ_MAGs.tar.gz $output_dir/LowQ_MAGs/
 rm -r $output_dir/LowQ_MAGs/
 printf "done.\n"
@@ -314,15 +315,13 @@ if [ ! -f $output_dir/gtdbtk_output/gtdbtk.ar*.classification_pplacer.tsv ] && [
 fi
 ##################################################
 
-
-file_list=$(gawk -F"\t" '{ if ($12>50 && $13<10) print $1 }' $checkm_stats | sed -r 's/$/.fa /g')
 ###################################################################################################
 # Run prokka on each HQB (added by Ryan 10.31.2018) using the GTDB-tk Kingdom annotation
 ###################################################################################################
 prokka_output_dir=$output_dir/prokka_annos
-IFS=' ' read -r -a array <<< "$file_list"
-for f in "${array[@]}";
+for file in $output_dir/MedQPlus_MAGs/*.fa;
 do
+	f=$( basename $file )	
 	bin_num=$(cut -d'.' -f2 <<< $f)
 	kingy=$(grep -w "$bin_num" $output_dir/gtdbtk_output/gtdbtk.*.classification_pplacer.tsv | gawk '{ print $2 }' | gawk -F';' '{ print $1 }' | sed 's/d__//g')
 	printf "[STATUS] Annotating $f with ${kingy}l info using Prokka... "
@@ -330,7 +329,7 @@ do
 	--kingdom $kingy \
 	--outdir $prokka_output_dir/$bin_num/ \
 	--force \
-	$output_dir/$f
+	$file
 	printf "done.\n"
 done
 
