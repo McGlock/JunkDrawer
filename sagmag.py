@@ -119,20 +119,28 @@ def get_kmer(seq, n):  # found on internet
 		yield result
 
 
-def get_frags(seq, l_max):  # not sure about this function, probs shouldn't use it
-	"Fragments seq into subseqs of length l_max,"
+def get_frags(seq, l_max, o_lap):  # not sure about this function, probs shouldn't use it
+	"Fragments seq into subseqs of length l_max and overlap of o_lap"
 	"Leftover tail overlaps with tail-1"
-	seq_frags = [seq[i:i+l_max] for i in
-					 range(0, len(seq), l_max)]
-	tail_frag = seq[-l_max:]
-	seq_frags[-1] = tail_frag
+	seq_frags = []
+	offset = l_max - o_lap
+	for i in range(0, len(seq), offset):
+		if i+l_max < len(seq):
+			frag = seq[i:i+l_max]
+		else:
+			frag = seq[-l_max:]
+		seq_frags.append(frag)
+	#seq_frags = [seq[i:i+l_max] for i in
+	#				 range(0, len(seq), l_max)]
+	#tail_frag = seq[-l_max:]
+	#seq_frags[-1] = tail_frag
 	return seq_frags
 
-def get_subseqs(seqs, n):
+def get_subseqs(seqs, n, o_lap):
 	all_sub_seqs = []
 	for seq in seqs:
 		clean_seq = seq.strip('\n').lower()
-		sub_list = get_frags(clean_seq, n)
+		sub_list = get_frags(clean_seq, n, o_lap)
 		all_sub_seqs.extend(sub_list)	
 	return all_sub_seqs
 
@@ -160,14 +168,12 @@ def plot_umap(df, n_neighbors=15, min_dist=0.1,
 	plt.clf()
 
 
-#plt.title('UMAP projection of SAG and MetaG contigs', fontsize=24)
-#plt.savefig('UMAP_plot.png')
-#plt.clf()
 
 ### Start Main ###
 sag_fasta = sys.argv[1]
 mg_fasta = sys.argv[2]
 max_contig_len = int(sys.argv[3])
+overlap_len = int(sys.argv[4])
 print('Max contig size is %s bp' % max_contig_len)
 
 # Process the SAG fasta
@@ -181,8 +187,7 @@ with open(sag_fasta, 'r') as f:
 		if seq != '':
 			sag_contigs.append(seq)
 # Break up contigs into overlapping subseqs
-sag_subs = get_subseqs(sag_contigs, max_contig_len)
-
+sag_subs = get_subseqs(sag_contigs, max_contig_len, overlap_len)
 sag_tetra_df = pd.DataFrame.from_dict(tetra_cnt(sag_subs))
 sag_tetra_df['contig_id'] = ['sag_0' for x in sag_tetra_df.index]
 sag_tetra_df.set_index('contig_id', inplace=True)
@@ -198,7 +203,7 @@ with open(mg_fasta, 'r') as f:
 		if seq != '':
 			mg_contigs.append(seq)
 # Break up contigs into overlapping subseqs
-mg_subs = get_subseqs(mg_contigs, max_contig_len)
+mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
 
 mg_tetra_df = pd.DataFrame.from_dict(tetra_cnt(mg_subs))
 mg_tetra_df['contig_id'] = ['contig_0' for x in mg_tetra_df.index]
@@ -240,26 +245,10 @@ sns.set(style='white', context='notebook', rc={'figure.figsize':(14,10)})
 
 import umap
 
-#reducer = umap.UMAP(
-#					n_neighbors=15,
-#					min_dist=0.0,
-#					n_components=2
-#					)
-
 for n in (2, 5, 10, 20, 50, 100, 200):
 	plot_umap(concat_df, n_neighbors=n, title='n_neighbors = {}'.format(n))
 for d in (0.0, 0.1, 0.25, 0.5, 0.8, 0.99):
     plot_umap(concat_df, min_dist=d, title='min_dist = {}'.format(d))
 
-#features = concat_df.values
-#targets = concat_df.index.values
-#color_list = [x[0] for x in enumerate(set(targets))]
-
-#embedding = reducer.fit_transform(features)
-
-#ax = sns.scatterplot(x=embedding[:, 0], y=embedding[:, 1], hue=targets)
-#plt.gca().set_aspect('equal', 'datalim')
-#plt.title('UMAP projection of SAG and MetaG contigs', fontsize=24)
-#plt.savefig('UMAP_plot.png')
-#plt.clf()
-
+### NEXT STEPS: Transforming New Data with UMAP ###
+### https://umap-learn.readthedocs.io/en/latest/transform.html ###
