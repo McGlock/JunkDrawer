@@ -8,6 +8,8 @@ import matplotlib
 matplotlib.use('agg')
 import seaborn as sns
 import matplotlib.pyplot as plt
+from os import listdir
+from os.path import isfile, join
 
 
 
@@ -123,13 +125,16 @@ def get_frags(seq, l_max, o_lap):  # not sure about this function, probs shouldn
 	"Fragments seq into subseqs of length l_max and overlap of o_lap"
 	"Leftover tail overlaps with tail-1"
 	seq_frags = []
-	offset = l_max - o_lap
-	for i in range(0, len(seq), offset):
-		if i+l_max < len(seq):
-			frag = seq[i:i+l_max]
-		else:
-			frag = seq[-l_max:]
-		seq_frags.append(frag)
+	if l_max > 0:
+		offset = l_max - o_lap
+		for i in range(0, len(seq), offset):
+			if i+l_max < len(seq):
+				frag = seq[i:i+l_max]
+			else:
+				frag = seq[-l_max:]
+			seq_frags.append(frag)
+	else:
+		seq_frags.append(seq)
 	#seq_frags = [seq[i:i+l_max] for i in
 	#				 range(0, len(seq), l_max)]
 	#tail_frag = seq[-l_max:]
@@ -155,43 +160,87 @@ def plot_umap(df, n_neighbors=15, min_dist=0.1,
 	)
 	features = concat_df.values
 	targets = concat_df.index.values
-	colors = ['r', 'g', 'b']
-	color_list = [colors[x[0]] for x in enumerate(set(targets))]
+	targets_ints = [x[0] for x in enumerate(targets, start=0)]
 
-	embedding = fit.fit_transform(features)
+	embedding = fit.fit_transform(features, y=targets_ints)
 	ax = sns.scatterplot(x=embedding[:, 0], y=embedding[:, 1], hue=targets)
 	plt.gca().set_aspect('equal', 'datalim')
 	plt.title(title, fontsize=18)
+	plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 	plot_file_name = '_'.join([str(n_neighbors), str(min_dist),
 								str(n_components), metric]) + '.png'
-	plt.savefig(plot_file_name)
+	plt.savefig(plot_file_name, bbox_inches="tight")
 	plt.clf()
 
 
+def get_seqs(fasta_file):
+	sag_contigs = []
+	with open(fasta_file, 'r') as f:
+		data = f.read()
+		split_data = data.split('>')
+		for reccord in split_data:
+			split_rec = reccord.split('\n')
+			seq = ''.join(split_rec[1:])
+			if seq != '':
+				sag_contigs.append(seq)
+	return sag_contigs
+
 
 ### Start Main ###
-sag_fasta = sys.argv[1]
-mg_fasta = sys.argv[2]
-max_contig_len = int(sys.argv[3])
-overlap_len = int(sys.argv[4])
-print('Max contig size is %s bp' % max_contig_len)
+sag_path = sys.argv[1]
+#mg_fasta = sys.argv[3]
+max_contig_len = int(sys.argv[2])
+overlap_len = int(sys.argv[3])
+if max_contig_len > 0:
+	print('Max contig size is %s bp' % max_contig_len)
+else:
+	print('Not fragmenting contigs')
 
-# Process the SAG fasta
-sag_contigs = []
-with open(sag_fasta, 'r') as f:
-	data = f.read()
-	split_data = data.split('>')
-	for reccord in split_data:
-		split_rec = reccord.split('\n')
-		seq = ''.join(split_rec[1:])
-		if seq != '':
-			sag_contigs.append(seq)
-# Break up contigs into overlapping subseqs
-sag_subs = get_subseqs(sag_contigs, max_contig_len, overlap_len)
-sag_tetra_df = pd.DataFrame.from_dict(tetra_cnt(sag_subs))
-sag_tetra_df['contig_id'] = ['sag_0' for x in sag_tetra_df.index]
-sag_tetra_df.set_index('contig_id', inplace=True)
-print('SAG tetranucleotide frequencies calculated')
+
+sag_files = [join(sag_path, f) for f in listdir(sag_path) if isfile(join(sag_path, f))]
+
+# Process the SAGs
+sag_tetra_df_list = []
+for sag in sag_files[:25]:
+	sag_id = sag.split('/')[-1].split('.')[0]
+	sag_contigs = get_seqs(sag)
+	# Break up contigs into overlapping subseqs
+	sag_subs = get_subseqs(sag_contigs, max_contig_len, overlap_len)
+	sag_tetra_df = pd.DataFrame.from_dict(tetra_cnt(sag_subs))
+	sag_tetra_df['sag_id'] = [sag_id for x in sag_tetra_df.index]
+	sag_tetra_df.set_index('sag_id', inplace=True)
+	sag_tetra_df_list.append(sag_tetra_df)
+	print('SAG %s tetranucleotide frequencies calculated' % sag_id)
+
+concat_df = pd.concat(sag_tetra_df_list)
+
+### Try UMAP ###
+import numpy as np
+from sklearn.datasets import load_iris, load_digits
+from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+
+sns.set(style='white', context='notebook', rc={'figure.figsize':(14,10)})
+
+import umap
+
+plot_umap(concat_df)
+
+#for n in (2, 5, 10, 20, 50, 100, 200):
+#	plot_umap(concat_df, n_neighbors=n, title='n_neighbors = {}'.format(n))
+#for d in (0.0, 0.1, 0.25, 0.5, 0.8, 0.99):
+#    plot_umap(concat_df, min_dist=d, title='min_dist = {}'.format(d))
+
+### NEXT STEPS: Transforming New Data with UMAP ###
+### https://umap-learn.readthedocs.io/en/latest/transform.html ###
+
+
+
+
+# Old code
+'''
 # Process the MetaG fasta
 mg_contigs = []
 with open(mg_fasta, 'r') as f:
@@ -206,12 +255,12 @@ with open(mg_fasta, 'r') as f:
 mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
 
 mg_tetra_df = pd.DataFrame.from_dict(tetra_cnt(mg_subs))
-mg_tetra_df['contig_id'] = ['contig_0' for x in mg_tetra_df.index]
+mg_tetra_df['contig_id'] = ['metag0' for x in mg_tetra_df.index]
 mg_tetra_df.set_index('contig_id', inplace=True)
 print('Metagenome tetranucleotide frequencies calculated')
 
-concat_df = pd.concat([sag_tetra_df, mg_tetra_df])
-
+concat_df = pd.concat([mg_tetra_df, sag0_tetra_df, sag1_tetra_df])
+'''
 # Don't need to scale tetra Hz data, I think?
 
 # PCA
@@ -232,23 +281,3 @@ ax = sns.scatterplot(x="principal component 1", y="principal component 2",
 plt.savefig('standard_pca.png')
 plt.clf()
 '''
-
-### Try UMAP ###
-import numpy as np
-from sklearn.datasets import load_iris, load_digits
-from sklearn.model_selection import train_test_split
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
-
-sns.set(style='white', context='notebook', rc={'figure.figsize':(14,10)})
-
-import umap
-
-for n in (2, 5, 10, 20, 50, 100, 200):
-	plot_umap(concat_df, n_neighbors=n, title='n_neighbors = {}'.format(n))
-for d in (0.0, 0.1, 0.25, 0.5, 0.8, 0.99):
-    plot_umap(concat_df, min_dist=d, title='min_dist = {}'.format(d))
-
-### NEXT STEPS: Transforming New Data with UMAP ###
-### https://umap-learn.readthedocs.io/en/latest/transform.html ###
