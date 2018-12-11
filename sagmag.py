@@ -8,6 +8,7 @@ import matplotlib
 matplotlib.use('agg')
 import seaborn as sns
 import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
 import hdbscan
 import umap
 from sklearn.preprocessing import StandardScaler
@@ -26,7 +27,6 @@ import pickle
 
 
 sns.set(style='white', context='notebook', rc={'figure.figsize':(14,10)})
-
 
 
 def tetra_cnt(seq_list):
@@ -141,7 +141,7 @@ def get_frags(seq, l_max, o_lap):  # not sure about this function, probs shouldn
 	"Fragments seq into subseqs of length l_max and overlap of o_lap"
 	"Leftover tail overlaps with tail-1"
 	seq_frags = []
-	if l_max > 0:
+	if (l_max != 0) and (len(seq) > l_max):
 		offset = l_max - o_lap
 		for i in range(0, len(seq), offset):
 			if i+l_max < len(seq):
@@ -152,6 +152,8 @@ def get_frags(seq, l_max, o_lap):  # not sure about this function, probs shouldn
 				seq_frags.append(frag)
 	elif 'n' not in seq:
 		seq_frags.append(seq)
+	else:
+		print('You have Ns in your seqs :(')
 	return seq_frags
 
 def get_subseqs(seq_list, n, o_lap):
@@ -165,33 +167,6 @@ def get_subseqs(seq_list, n, o_lap):
 		all_sub_seqs.extend(sub_list)
 		all_sub_headers.extend(sub_headers)	
 	return all_sub_headers, all_sub_seqs
-
-
-def plot_umap(df, sv_pth='./', n_neighbors=15, min_dist=0.1,
-				n_components=2, metric='euclidean', random_state=42,
-				title=''):
-	fit = umap.UMAP(
-		n_neighbors=n_neighbors,
-		min_dist=min_dist,
-		n_components=n_components,
-		metric=metric,
-		random_state=random_state
-		)
-	features = df.values
-	targets = df.index.values
-	targets_ints = [x[0] for x in enumerate(targets, start=0)]
-
-	embedding = fit.fit_transform(features)
-	ax = sns.scatterplot(x=embedding[:, 0], y=embedding[:, 1], hue=targets)
-	plt.gca().set_aspect('equal', 'datalim')
-	plt.title(title, fontsize=18)
-	plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-	plot_file_name = '_'.join([str(n_neighbors), str(min_dist),
-								str(n_components), metric]) + '.png'
-	plot_save_path = join(sv_pth, plot_file_name)
-	plt.savefig(plot_save_path, bbox_inches="tight")
-	plt.clf()
-	return embedding
 
 
 def get_seqs(fasta_file):
@@ -224,6 +199,68 @@ def calc_nuc(nuc, ind):
 	return nuc_hash
 
 
+def plot_umap(df, sv_pth='./', n_neighbors=15, min_dist=0.1,
+				n_components=2, metric='euclidean', random_state=42,
+				title=''):
+	fit = umap.UMAP(
+		n_neighbors=n_neighbors,
+		min_dist=min_dist,
+		n_components=n_components,
+		metric=metric,
+		random_state=random_state
+		)
+	features = df.values
+	targets = df.index.values
+	targets_ints = [x[0] for x in enumerate(targets, start=0)]
+
+	embedding = fit.fit_transform(features)
+	ax = sns.scatterplot(x=embedding[:, 0], y=embedding[:, 1], hue=targets)
+	plt.gca().set_aspect('equal', 'datalim')
+	plt.title(title, fontsize=18)
+	plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+	plot_file_name = '_'.join([str(n_neighbors), str(min_dist),
+								str(n_components), metric]) + '.png'
+	plot_save_path = join(sv_pth, plot_file_name)
+	plt.savefig(plot_save_path, bbox_inches="tight")
+	plt.clf()
+	return embedding
+
+
+def draw_ellipse(position, covariance, ax=None, **kwargs):
+	"""Draw an ellipse with a given position and covariance"""
+	ax = ax or plt.gca()
+	
+	# Convert covariance to principal axes
+	if covariance.shape == (2, 2):
+		U, s, Vt = np.linalg.svd(covariance)
+		angle = np.degrees(np.arctan2(U[1, 0], U[0, 0]))
+		width, height = 2 * np.sqrt(s)
+	else:
+		angle = 0
+		width, height = 2 * np.sqrt(covariance)
+	
+	# Draw the Ellipse
+	for nsig in range(1, 4):
+		ax.add_patch(Ellipse(position, nsig * width, nsig * height,
+							 angle, **kwargs))
+		
+def plot_gmm(sg_id, sv_pth, gmm, X, targets, label=True, ax=None):
+	labels = gmm.fit(X).predict(X)
+	if label:
+		ax = sns.scatterplot(x=data[:, 0], y=data[:, 1], hue=targets)
+	plt.gca().set_aspect('equal', 'datalim')
+	
+	w_factor = 0.2 / gmm.weights_.max()
+	for pos, covar, w in zip(gmm.means_, gmm.covariances_, gmm.weights_):
+		draw_ellipse(pos, covar, alpha=w * w_factor)
+	plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+	plot_file_name = sag_id + '.' + 'GMM_predict.UMAP.png'
+	plot_save_path = join(save_path, plot_file_name)
+	plt.savefig(plot_save_path, bbox_inches="tight")
+	plt.clf()
+
+
+
 ### Start Main ###
 #sag_path = sys.argv[1]
 sag_file = sys.argv[1]
@@ -239,9 +276,8 @@ else:
 
 # SAG Tetras
 sag_id = sag_file.split('/')[-1].split('.')[0]
-'''
-sag_contigs = get_seqs(sag_file)
 # Break up contigs into overlapping subseqs
+sag_contigs = get_seqs(sag_file)
 sag_headers, sag_subs = get_subseqs(sag_contigs, max_contig_len, overlap_len)
 sag_tetra_df = pd.DataFrame.from_dict(tetra_cnt(sag_subs))
 sag_tetra_df['contig_id'] = sag_headers
@@ -263,11 +299,11 @@ with open(join(save_path, sag_id + '.pkl'), 'wb') as p:
 '''
 with open(join(save_path, sag_id + '.pkl'), 'rb') as p:
 	sag_hashes = pickle.load(p)
+	sag_hashes_set = set(sag_hashes)
 print('Unpickled SAG L-hashes')
-
+'''
 # MG Tetras
 mg_id = mg_file.split('/')[-1].split('.')[0]
-'''
 mg_contigs = get_seqs(mg_file)
 # Break up contigs into overlapping subseqs
 mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
@@ -287,7 +323,8 @@ for mg_header, mg_frag in zip(mg_headers, mg_subs):
 	tmp, mg_Ls = get_subseqs([(mg_header, mg_frag)], 24, 23)
 	mg_hashes = calc_seg(mg_Ls)
 	mg_hashes.sort(reverse=True)
-	if any(i in sag_hashes for i in mg_hashes):
+	mg_hashes_set = set(mg_hashes)
+	if sag_hashes_set.intersection(mg_hashes_set):
 		print('Fragment passed identity filter')
 		pass_list.append(mg_header)
 	else:
@@ -298,18 +335,20 @@ with open(join(save_path, mg_id + '.pkl'), 'wb') as p:
 with open(join(save_path, mg_id + '.pkl'), 'rb') as p:
 	pass_list = pickle.load(p)
 print('Unpickled MG Pass Contigs')
-
+'''
 # Set indices for UMAP colorcoding
 sag_tetra_df['grouping'] = ['SAG' for x in sag_tetra_df.index]
 mg_new_index = []
 for index in mg_tetra_df.index:
-	if (index in pass_list) and ('NC_000913.3' in index):
+	print(index)
+	print(index.rsplit('_', 1)[0])
+	if (index in pass_list) and (index.rsplit('_', 1)[0] in sag_headers):
 		mg_new_index.append('TruePos')
-	elif (index in pass_list) and ('NC_000913.3' not in index):
+	elif (index in pass_list) and (index.rsplit('_', 1)[0] not in sag_headers):
 			mg_new_index.append('FalsePos')
-	elif (index not in pass_list) and ('NC_000913.3' in index):
+	elif (index not in pass_list) and (index.rsplit('_', 1)[0] in sag_headers):
 		mg_new_index.append('FalseNeg')
-	elif (index not in pass_list) and ('NC_000913.3' not in index):
+	elif (index not in pass_list) and (index.rsplit('_', 1)[0] not in sag_headers):
 		mg_new_index.append('TrueNeg')
 
 mg_tetra_df['grouping'] = mg_new_index
@@ -328,39 +367,61 @@ features = concat_df.values
 targets = concat_df.index.values
 targets_ints = [x[0] for x in enumerate(targets, start=0)]
 
-
 data = plot_umap(concat_df, save_path, n_neighbors=30, min_dist=0.0,
 							n_components=2, random_state=42
 							)
+
+gmm = GMM(n_components=5, covariance_type='full', random_state=42).fit(data)
+probs = gmm.predict_proba(data)
+probs_df = pd.DataFrame(data=probs.round(3), index=grouping)
+probs_df.reset_index(inplace=True)
+print(probs_df.groupby('grouping').sum())
+
+labels = gmm.predict(data)
+
+plot_gmm(sag_id, save_path, gmm, data, targets)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 '''
 pca = PCA(0.99, whiten=True)
 data = pca.fit_transform(features)
 print(data.shape)
 '''
-
-n_components = np.arange(1, 136)
+'''
+n_components = np.arange(1, 20)
 models = [GMM(n, covariance_type='full', random_state=42).fit(data)
-          for n in n_components]
+		  for n in n_components]
 plt.plot(n_components, [m.bic(data) for m in models], label='BIC')
 plt.plot(n_components, [m.aic(data) for m in models], label='AIC')
 plt.legend(loc='best')
 plt.xlabel('n_components');
-plot_file_name = sag_id + '.' + 'AIC_BIC.UMAP.png'
+plot_file_name = sag_id + '.' + 'AIC_BIC.PCA.png'
 plot_save_path = join(save_path, plot_file_name)
 plt.savefig(plot_save_path, bbox_inches="tight")
 plt.clf()
+'''
 
-gmm = GMM(n_components=15, covariance_type='full', random_state=42).fit(data)
-probs = gmm.predict_proba(data)
-probs_df = pd.DataFrame(data=probs.round(3), index=grouping)
-probs_df.reset_index(inplace=True)
-print(probs_df.groupby('grouping').sum())
 
-#print(probs_df.head())
-labels = gmm.predict(data)
-sizes = probs.max(1)  # square emphasizes differences
 
+
+'''
 ax = sns.scatterplot(x=data[:, 0], y=data[:, 1], hue=targets)
 plt.gca().set_aspect('equal', 'datalim')
 plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
@@ -368,7 +429,7 @@ plot_file_name = sag_id + '.' + 'GMM_predict.UMAP.png'
 plot_save_path = join(save_path, plot_file_name)
 plt.savefig(plot_save_path, bbox_inches="tight")
 plt.clf()
-
+'''
 
 '''
 ### Try UMAP ###
@@ -378,9 +439,9 @@ for n in (2, 5, 10, 20, 50, 100, 200):
 				title='n_neighbors = {}'.format(n)
 				)
 for d in (0.0, 0.1, 0.25, 0.5, 0.8, 0.99):
-    plot_umap(concat_df, save_path, min_dist=d,
-    			title='min_dist = {}'.format(d)
-    			)
+	plot_umap(concat_df, save_path, min_dist=d,
+				title='min_dist = {}'.format(d)
+				)
 
 for m in ('euclidean', 'l2', 'l1', 'manhattan', 'cityblock', 'braycurtis',
 			'canberra', 'chebyshev', 'correlation', 'cosine', 'dice',
@@ -445,37 +506,37 @@ plt.clf()
 # Old code
 '''
 class KDEClassifier(BaseEstimator, ClassifierMixin):
-    """Bayesian generative classification based on KDE
-    
-    Parameters
-    ----------
-    bandwidth : float
-        the kernel bandwidth within each class
-    kernel : str
-        the kernel name, passed to KernelDensity
-    """
-    def __init__(self, bandwidth=1.0, kernel='gaussian'):
-        self.bandwidth = bandwidth
-        self.kernel = kernel
-        
-    def fit(self, X, y):
-        self.classes_ = np.sort(np.unique(y))
-        training_sets = [X[y == yi] for yi in self.classes_]
-        self.models_ = [KernelDensity(bandwidth=self.bandwidth,
-                                      kernel=self.kernel).fit(Xi)
-                        for Xi in training_sets]
-        self.logpriors_ = [np.log(Xi.shape[0] / X.shape[0])
-                           for Xi in training_sets]
-        return self
-        
-    def predict_proba(self, X):
-        logprobs = np.array([model.score_samples(X)
-                             for model in self.models_]).T
-        result = np.exp(logprobs + self.logpriors_)
-        return result / result.sum(1, keepdims=True)
-        
-    def predict(self, X):
-        return self.classes_[np.argmax(self.predict_proba(X), 1)]
+	"""Bayesian generative classification based on KDE
+	
+	Parameters
+	----------
+	bandwidth : float
+		the kernel bandwidth within each class
+	kernel : str
+		the kernel name, passed to KernelDensity
+	"""
+	def __init__(self, bandwidth=1.0, kernel='gaussian'):
+		self.bandwidth = bandwidth
+		self.kernel = kernel
+		
+	def fit(self, X, y):
+		self.classes_ = np.sort(np.unique(y))
+		training_sets = [X[y == yi] for yi in self.classes_]
+		self.models_ = [KernelDensity(bandwidth=self.bandwidth,
+									  kernel=self.kernel).fit(Xi)
+						for Xi in training_sets]
+		self.logpriors_ = [np.log(Xi.shape[0] / X.shape[0])
+						   for Xi in training_sets]
+		return self
+		
+	def predict_proba(self, X):
+		logprobs = np.array([model.score_samples(X)
+							 for model in self.models_]).T
+		result = np.exp(logprobs + self.logpriors_)
+		return result / result.sum(1, keepdims=True)
+		
+	def predict(self, X):
+		return self.classes_[np.argmax(self.predict_proba(X), 1)]
 
 
 ### KDE ###
@@ -502,7 +563,7 @@ print(data.shape)
 
 n_components = np.arange(20, 150, 10)
 models = [GMM(n, covariance_type='full', random_state=0)
-          for n in n_components]
+		  for n in n_components]
 aics = [model.fit(data).aic(data) for model in models]
 plt.plot(n_components, aics)
 plot_save_path = join(save_path, 'GMM_AIC.png')
