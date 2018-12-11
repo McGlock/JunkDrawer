@@ -275,6 +275,8 @@ else:
 	print('Not fragmenting contigs')
 
 # SAG Tetras
+with open(sag_file.split('.')[0] + '.full.headers', 'r') as f:
+    sag_raw_contig_headers = [x.replace('>', '') for x in f.read().splitlines()]
 sag_id = sag_file.split('/')[-1].split('.')[0]
 # Break up contigs into overlapping subseqs
 sag_contigs = get_seqs(sag_file)
@@ -325,10 +327,10 @@ for mg_header, mg_frag in zip(mg_headers, mg_subs):
 	mg_hashes.sort(reverse=True)
 	mg_hashes_set = set(mg_hashes)
 	if sag_hashes_set.intersection(mg_hashes_set):
-		print('Fragment passed identity filter')
+		print('%s passed identity filter' % mg_header)
 		pass_list.append(mg_header)
 	else:
-		print('Failed')
+		print('%s failed' % mg_header)
 with open(join(save_path, mg_id + '.pkl'), 'wb') as p:
 	pickle.dump(pass_list, p)
 '''
@@ -339,16 +341,15 @@ print('Unpickled MG Pass Contigs')
 # Set indices for UMAP colorcoding
 sag_tetra_df['grouping'] = ['SAG' for x in sag_tetra_df.index]
 mg_new_index = []
-for index in mg_tetra_df.index:
-	print(index)
-	print(index.rsplit('_', 1)[0])
-	if (index in pass_list) and (index.rsplit('_', 1)[0] in sag_headers):
+for index in mg_tetra_df.index:  # TODO: breaking with GCF_001580535.SAG.fasta
+	trimmed_index = index.rsplit('_', 1)[0]
+	if (index in pass_list) and (trimmed_index in sag_raw_contig_headers):
 		mg_new_index.append('TruePos')
-	elif (index in pass_list) and (index.rsplit('_', 1)[0] not in sag_headers):
+	elif (index in pass_list) and (trimmed_index not in sag_raw_contig_headers):
 			mg_new_index.append('FalsePos')
-	elif (index not in pass_list) and (index.rsplit('_', 1)[0] in sag_headers):
+	elif (index not in pass_list) and (trimmed_index in sag_raw_contig_headers):
 		mg_new_index.append('FalseNeg')
-	elif (index not in pass_list) and (index.rsplit('_', 1)[0] not in sag_headers):
+	elif (index not in pass_list) and (trimmed_index not in sag_raw_contig_headers):
 		mg_new_index.append('TrueNeg')
 
 mg_tetra_df['grouping'] = mg_new_index
