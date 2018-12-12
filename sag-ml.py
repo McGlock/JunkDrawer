@@ -284,15 +284,17 @@ for sag_file in sag_list:
 	# Break up contigs into overlapping subseqs
 	sag_contigs = get_seqs(sag_file)
 	sag_headers, sag_subs = get_subseqs(sag_contigs, max_contig_len, overlap_len)
+	'''
 	sag_tetra_df = pd.DataFrame.from_dict(tetra_cnt(sag_subs))
 	sag_tetra_df['contig_id'] = sag_headers
 	sag_tetra_df.set_index('contig_id', inplace=True)
 	print('SAG %s tetranucleotide frequencies calculated' % sag_id)
 	sag_tetra_df.to_csv(join(save_path, sag_id + '.tsv'), sep='\t')
+	'''
 	sag_tetra_df = pd.read_csv(join(save_path, sag_id + '.tsv'), sep='\t', index_col=0,
 							header=0)
 	print('Opened SAG tetranucleotide tsv file')
-
+	'''
 	# SAG L-seg hash
 	tmp, sag_Ls = get_subseqs(sag_contigs, 24, 23)
 	sag_hashes = calc_seg(sag_Ls)
@@ -300,6 +302,7 @@ for sag_file in sag_list:
 	sag_hashes_set = set(sag_hashes)
 	with open(join(save_path, sag_id + '.pkl'), 'wb') as p:
 		pickle.dump(sag_hashes_set, p)
+	'''
 	with open(join(save_path, sag_id + '.pkl'), 'rb') as p:
 		sag_hashes = pickle.load(p)
 		sag_hashes_set = set(sag_hashes)
@@ -310,11 +313,13 @@ for sag_file in sag_list:
 	mg_contigs = get_seqs(mg_file)
 	# Break up contigs into overlapping subseqs
 	mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
+	'''
 	mg_tetra_df = pd.DataFrame.from_dict(tetra_cnt(mg_subs))
 	mg_tetra_df['contig_id'] = mg_headers
 	mg_tetra_df.set_index('contig_id', inplace=True)
 	print('MG %s tetranucleotide frequencies calculated' % mg_id)
 	mg_tetra_df.to_csv(join(save_path, mg_id + '.tsv'), sep='\t')
+	'''
 	mg_tetra_df = pd.read_csv(join(save_path, mg_id + '.tsv'), sep='\t', index_col=0,
 							header=0)
 	print('Opened MG tetranucleotide tsv file')
@@ -374,9 +379,10 @@ for sag_file in sag_list:
 	sag_umap_df = umap_df.loc[umap_df.index == 'SAG']
 	sag_std = sag_umap_df.std().values
 	sag_mean = sag_umap_df.mean().values
-	sag_covar = sag_umap_df.cov()
+	sag_covar = sag_umap_df.cov().values
 	ax = sns.scatterplot(x=umap_df['pc1'], y=umap_df['pc2'], hue=umap_df.index)
-	draw_ellipse(sag_mean, sag_covar, alpha=0.2)
+	draw_ellipse(sag_mean, sag_covar, alpha=0.05)
+	draw_ellipse(sag_mean, sag_covar, alpha=0.15)
 	plt.gca().set_aspect('equal', 'datalim')
 	plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 	plot_file_name = sag_id + '.' + 'UMAP_w_Ellipse.png'
@@ -385,6 +391,44 @@ for sag_file in sag_list:
 	plt.clf()
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Old code
 
 '''
 gmm = GMM(n_components=5, covariance_type='full', random_state=42).fit(data, targets)
@@ -398,10 +442,6 @@ labels = gmm.predict(data)
 plot_gmm(sag_id, save_path, gmm, data, targets)
 
 '''
-
-
-
-
 '''
 class KDEClassifier(BaseEstimator, ClassifierMixin):
 	"""Bayesian generative classification based on KDE
@@ -553,7 +593,6 @@ plt.savefig(plot_save_path, bbox_inches="tight")
 plt.clf()
 '''
 
-# Old code
 '''
 
 '''
