@@ -373,7 +373,23 @@ targets_ints = [x[0] for x in enumerate(targets, start=0)]
 data = plot_umap(concat_df, save_path, n_neighbors=30, min_dist=0.0,
 							n_components=2, random_state=42
 							)
+umap_df = pd.DataFrame(data, columns=['pc1', 'pc2'], index=targets)
+sag_umap_df = umap_df.loc[umap_df.index == 'SAG']
+sag_std = sag_umap_df.std().values
+sag_mean = sag_umap_df.mean().values
+sag_covar = sag_umap_df.cov()
+ax = sns.scatterplot(x=umap_df['pc1'], y=umap_df['pc2'], hue=umap_df.index)
+draw_ellipse(sag_mean, sag_covar, alpha=0.2)
+plt.gca().set_aspect('equal', 'datalim')
+plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+plot_file_name = sag_id + '.' + 'UMAP_w_Ellipse.png'
+plot_save_path = join(save_path, plot_file_name)
+plt.savefig(plot_save_path, bbox_inches="tight")
+plt.clf()
 
+
+
+'''
 gmm = GMM(n_components=5, covariance_type='full', random_state=42).fit(data, targets)
 probs = gmm.predict_proba(data)
 probs_df = pd.DataFrame(data=probs.round(3), index=grouping)
@@ -384,6 +400,12 @@ labels = gmm.predict(data)
 
 plot_gmm(sag_id, save_path, gmm, data, targets)
 
+'''
+
+
+
+
+'''
 class KDEClassifier(BaseEstimator, ClassifierMixin):
 	"""Bayesian generative classification based on KDE
 	
@@ -434,23 +456,7 @@ plt.savefig(plot_save_path, bbox_inches="tight")
 plt.clf()
 print(grid.best_params_)
 print('accuracy =', grid.cv_results_)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+'''
 '''
 pca = PCA(0.99, whiten=True)
 data = pca.fit_transform(features)
@@ -469,10 +475,6 @@ plot_save_path = join(save_path, plot_file_name)
 plt.savefig(plot_save_path, bbox_inches="tight")
 plt.clf()
 '''
-
-
-
-
 '''
 ax = sns.scatterplot(x=data[:, 0], y=data[:, 1], hue=targets)
 plt.gca().set_aspect('equal', 'datalim')
@@ -482,7 +484,6 @@ plot_save_path = join(save_path, plot_file_name)
 plt.savefig(plot_save_path, bbox_inches="tight")
 plt.clf()
 '''
-
 '''
 ### Try UMAP ###
 plot_umap(concat_df, save_path)
