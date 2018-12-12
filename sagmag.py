@@ -245,9 +245,9 @@ def draw_ellipse(position, covariance, ax=None, **kwargs):
 							 angle, **kwargs))
 		
 def plot_gmm(sg_id, sv_pth, gmm, X, targets, label=True, ax=None):
-	labels = gmm.fit(X).predict(X)
+	labels = gmm.fit(X, targets).predict(X)
 	if label:
-		ax = sns.scatterplot(x=data[:, 0], y=data[:, 1], hue=targets)
+		ax = sns.scatterplot(x=X[:, 0], y=X[:, 1], hue=targets)
 	plt.gca().set_aspect('equal', 'datalim')
 	
 	w_factor = 0.2 / gmm.weights_.max()
@@ -281,6 +281,7 @@ sag_id = sag_file.split('/')[-1].split('.')[0]
 # Break up contigs into overlapping subseqs
 sag_contigs = get_seqs(sag_file)
 sag_headers, sag_subs = get_subseqs(sag_contigs, max_contig_len, overlap_len)
+'''
 sag_tetra_df = pd.DataFrame.from_dict(tetra_cnt(sag_subs))
 sag_tetra_df['contig_id'] = sag_headers
 sag_tetra_df.set_index('contig_id', inplace=True)
@@ -303,12 +304,13 @@ with open(join(save_path, sag_id + '.pkl'), 'rb') as p:
 	sag_hashes = pickle.load(p)
 	sag_hashes_set = set(sag_hashes)
 print('Unpickled SAG L-hashes')
-'''
+
 # MG Tetras
 mg_id = mg_file.split('/')[-1].split('.')[0]
 mg_contigs = get_seqs(mg_file)
 # Break up contigs into overlapping subseqs
 mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
+'''
 mg_tetra_df = pd.DataFrame.from_dict(tetra_cnt(mg_subs))
 mg_tetra_df['contig_id'] = mg_headers
 mg_tetra_df.set_index('contig_id', inplace=True)
@@ -337,7 +339,7 @@ with open(join(save_path, mg_id + '.pkl'), 'wb') as p:
 with open(join(save_path, mg_id + '.pkl'), 'rb') as p:
 	pass_list = pickle.load(p)
 print('Unpickled MG Pass Contigs')
-'''
+
 # Set indices for UMAP colorcoding
 sag_tetra_df['grouping'] = ['SAG' for x in sag_tetra_df.index]
 mg_new_index = []
@@ -372,7 +374,7 @@ data = plot_umap(concat_df, save_path, n_neighbors=30, min_dist=0.0,
 							n_components=2, random_state=42
 							)
 
-gmm = GMM(n_components=5, covariance_type='full', random_state=42).fit(data)
+gmm = GMM(n_components=5, covariance_type='full', random_state=42).fit(data, targets)
 probs = gmm.predict_proba(data)
 probs_df = pd.DataFrame(data=probs.round(3), index=grouping)
 probs_df.reset_index(inplace=True)
@@ -382,7 +384,56 @@ labels = gmm.predict(data)
 
 plot_gmm(sag_id, save_path, gmm, data, targets)
 
+class KDEClassifier(BaseEstimator, ClassifierMixin):
+	"""Bayesian generative classification based on KDE
+	
+	Parameters
+	----------
+	bandwidth : float
+		the kernel bandwidth within each class
+	kernel : str
+		the kernel name, passed to KernelDensity
+	"""
+	def __init__(self, bandwidth=1.0, kernel='gaussian'):
+		self.bandwidth = bandwidth
+		self.kernel = kernel
+		
+	def fit(self, X, y):
+		self.classes_ = np.sort(np.unique(y))
+		training_sets = [X[y == yi] for yi in self.classes_]
+		self.models_ = [KernelDensity(bandwidth=self.bandwidth,
+									  kernel=self.kernel).fit(Xi)
+						for Xi in training_sets]
+		self.logpriors_ = [np.log(Xi.shape[0] / X.shape[0])
+						   for Xi in training_sets]
+		return self
+		
+	def predict_proba(self, X):
+		logprobs = np.array([model.score_samples(X)
+							 for model in self.models_]).T
+		result = np.exp(logprobs + self.logpriors_)
+		return result / result.sum(1, keepdims=True)
+		
+	def predict(self, X):
+		return self.classes_[np.argmax(self.predict_proba(X), 1)]
 
+
+### KDE ###
+bandwidths = 10 ** np.linspace(0, 2, 100)
+grid = GridSearchCV(KernelDensity(kernel='gaussian'),
+					{'bandwidth': bandwidths}
+					)
+grid.fit(features, targets)
+scores = [val.mean_validation_score for val in grid.grid_scores_]
+plt.semilogx(bandwidths, scores)
+plt.xlabel('bandwidth')
+plt.ylabel('accuracy')
+plt.title('KDE Model Performance')
+plot_save_path = join(save_path, 'KDE_model_perform.png')
+plt.savefig(plot_save_path, bbox_inches="tight")
+plt.clf()
+print(grid.best_params_)
+print('accuracy =', grid.cv_results_)
 
 
 
@@ -506,55 +557,7 @@ plt.clf()
 
 # Old code
 '''
-class KDEClassifier(BaseEstimator, ClassifierMixin):
-	"""Bayesian generative classification based on KDE
-	
-	Parameters
-	----------
-	bandwidth : float
-		the kernel bandwidth within each class
-	kernel : str
-		the kernel name, passed to KernelDensity
-	"""
-	def __init__(self, bandwidth=1.0, kernel='gaussian'):
-		self.bandwidth = bandwidth
-		self.kernel = kernel
-		
-	def fit(self, X, y):
-		self.classes_ = np.sort(np.unique(y))
-		training_sets = [X[y == yi] for yi in self.classes_]
-		self.models_ = [KernelDensity(bandwidth=self.bandwidth,
-									  kernel=self.kernel).fit(Xi)
-						for Xi in training_sets]
-		self.logpriors_ = [np.log(Xi.shape[0] / X.shape[0])
-						   for Xi in training_sets]
-		return self
-		
-	def predict_proba(self, X):
-		logprobs = np.array([model.score_samples(X)
-							 for model in self.models_]).T
-		result = np.exp(logprobs + self.logpriors_)
-		return result / result.sum(1, keepdims=True)
-		
-	def predict(self, X):
-		return self.classes_[np.argmax(self.predict_proba(X), 1)]
 
-
-### KDE ###
-bandwidths = 10 ** np.linspace(0, 2, 100)
-grid = GridSearchCV(KDEClassifier(), {'bandwidth': bandwidths})
-grid.fit(features, targets)
-
-scores = [val.mean_validation_score for val in grid.grid_scores_]
-plt.semilogx(bandwidths, scores)
-plt.xlabel('bandwidth')
-plt.ylabel('accuracy')
-plt.title('KDE Model Performance')
-plot_save_path = join(save_path, 'KDE_model_perform.png')
-plt.savefig(plot_save_path, bbox_inches="tight")
-plt.clf()
-print(grid.best_params_)
-print('accuracy =', grid.cv_results_)
 '''
 ### PCA AIC ###
 '''
