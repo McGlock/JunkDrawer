@@ -313,186 +313,193 @@ def calc_err(df):
 	return error_df
 
 
-### Start Main ###
-sag_path = sys.argv[1]
-mg_file = sys.argv[2]
-max_contig_len = int(sys.argv[3])
-overlap_len = int(sys.argv[4])
-save_path = sys.argv[5]
+def main():
+	sag_path = sys.argv[1]
+	mg_file = sys.argv[2]
+	max_contig_len = int(sys.argv[3])
+	overlap_len = int(sys.argv[4])
+	save_path = sys.argv[5]
 
-# TODO: build argv interface
-# TODO: extract all magic numbers to be built into argv
+	# TODO: build argv interface
+	# TODO: extract all magic numbers to be built into argv
+	# TODO: Refactor all definitions, they are a mess :/
 
-if isdir(sag_path):
-	print('[SAG+]: Directory specified, looking for .fasta files within')
-	sag_list = [join(sag_path, f) for f in
-							listdir(sag_path) if '.fasta' in f
-							]
-elif isfile(sag_path):
-	print('[SAG+]: File specified, processing %s' % os.path.basename(sag_path))
-	sag_list = [sag_path]
+	if isdir(sag_path):
+		print('[SAG+]: Directory specified, looking for .fasta files within')
+		sag_list = [join(sag_path, f) for f in
+								listdir(sag_path) if '.fasta' in f
+								]
+	elif isfile(sag_path):
+		print('[SAG+]: File specified, processing %s' % os.path.basename(sag_path))
+		sag_list = [sag_path]
 
-error_df_list = []
-subseq_map_list = []
-for sag_file in sag_list:
-	### Used for seq tracking and error analysis
-	with open(sag_file.split('.')[0] + '.full.headers', 'r') as f:
-		sag_raw_contig_headers = [x.replace('>', '') for x in f.read().splitlines()]
-	### END
+	error_df_list = []
+	subseq_map_list = []
+	for sag_file in sag_list:
+		### Used for seq tracking and error analysis
+		with open(sag_file.split('.')[0] + '.full.headers', 'r') as f:
+			sag_raw_contig_headers = [x.replace('>', '') for x in f.read().splitlines()]
+		### END
 
-	sag_id = sag_file.split('/')[-1].split('.')[0]
-	# SAG Tetras
-	if isfile(join(save_path, sag_id + '.tsv')):
-		sag_tetra_df = pd.read_csv(join(save_path, sag_id + '.tsv'), sep='\t', index_col=0,
-								header=0)
-		print('[SAG+]: Found %s SAG tetranucleotide tsv file' % sag_id)
-	else:
-		print('[SAG+]: Calculating tetramer frequencies for %s' % sag_id)
-		sag_contigs = get_seqs(sag_file)
-		sag_headers, sag_subs = get_subseqs(sag_contigs, max_contig_len, overlap_len)
-		sag_tetra_df = pd.DataFrame.from_dict(tetra_cnt(sag_subs))
-		sag_tetra_df['contig_id'] = sag_headers
-		sag_tetra_df.set_index('contig_id', inplace=True)
-		sag_tetra_df.to_csv(join(save_path, sag_id + '.tsv'), sep='\t')
+		sag_id = sag_file.split('/')[-1].split('.')[0]
+		# SAG Tetras
+		if isfile(join(save_path, sag_id + '.tsv')):
+			sag_tetra_df = pd.read_csv(join(save_path, sag_id + '.tsv'), sep='\t', index_col=0,
+									header=0)
+			print('[SAG+]: Found %s SAG tetranucleotide tsv file' % sag_id)
+		else:
+			print('[SAG+]: Calculating tetramer frequencies for %s' % sag_id)
+			sag_contigs = get_seqs(sag_file)
+			sag_headers, sag_subs = get_subseqs(sag_contigs, max_contig_len, overlap_len)
+			sag_tetra_df = pd.DataFrame.from_dict(tetra_cnt(sag_subs))
+			sag_tetra_df['contig_id'] = sag_headers
+			sag_tetra_df.set_index('contig_id', inplace=True)
+			sag_tetra_df.to_csv(join(save_path, sag_id + '.tsv'), sep='\t')
 
-	# SAG subseqs L-mer hash
-	if isfile(join(save_path, sag_id + '.pkl')):
-		with open(join(save_path, sag_id + '.pkl'), 'rb') as p:
-			sag_hashes = pickle.load(p)
+		# SAG subseqs L-mer hash
+		if isfile(join(save_path, sag_id + '.pkl')):
+			with open(join(save_path, sag_id + '.pkl'), 'rb') as p:
+				sag_hashes = pickle.load(p)
+				sag_hashes_set = set(sag_hashes)
+			print('[SAG+]: Unpickled %s L-mer hashes' % sag_id)
+		else:
+			print('[SAG+]: Calculating L-mer hashes for %s' % sag_id)
+			tmp, sag_Ls = get_subseqs(sag_contigs, 24, 23)
+			sag_hashes = calc_seg(sag_Ls)
+			sag_hashes.sort(reverse=True)
 			sag_hashes_set = set(sag_hashes)
-		print('[SAG+]: Unpickled %s L-mer hashes' % sag_id)
-	else:
-		print('[SAG+]: Calculating L-mer hashes for %s' % sag_id)
-		tmp, sag_Ls = get_subseqs(sag_contigs, 24, 23)
-		sag_hashes = calc_seg(sag_Ls)
-		sag_hashes.sort(reverse=True)
-		sag_hashes_set = set(sag_hashes)
-		with open(join(save_path, sag_id + '.pkl'), 'wb') as p:
-			pickle.dump(sag_hashes_set, p)
-	
-	# MG Tetras
-	mg_id = mg_file.split('/')[-1].split('.')[0]
-	if isfile(join(save_path, mg_id + '.tsv')):
-		mg_tetra_df = pd.read_csv(join(save_path, mg_id + '.tsv'), sep='\t', index_col=0,
-								header=0)
-		print('[SAG+]: Found %s MetaG tetranucleotide tsv file' % mg_id)
-	else:
-		print('[SAG+]: Calculating tetramer frequencies for %s' % mg_id)
-		mg_contigs = get_seqs(mg_file)
-		mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
-		mg_tetra_df = pd.DataFrame.from_dict(tetra_cnt(mg_subs))
-		mg_tetra_df['contig_id'] = mg_headers
-		mg_tetra_df.set_index('contig_id', inplace=True)
-		mg_tetra_df.to_csv(join(save_path, mg_id + '.tsv'), sep='\t')
+			with open(join(save_path, sag_id + '.pkl'), 'wb') as p:
+				pickle.dump(sag_hashes_set, p)
+		
+		# MG Tetras
+		mg_id = mg_file.split('/')[-1].split('.')[0]
+		if isfile(join(save_path, mg_id + '.tsv')):
+			mg_tetra_df = pd.read_csv(join(save_path, mg_id + '.tsv'), sep='\t', index_col=0,
+									header=0)
+			print('[SAG+]: Found %s MetaG tetranucleotide tsv file' % mg_id)
+		else:
+			print('[SAG+]: Calculating tetramer frequencies for %s' % mg_id)
+			mg_contigs = get_seqs(mg_file)
+			mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
+			mg_tetra_df = pd.DataFrame.from_dict(tetra_cnt(mg_subs))
+			mg_tetra_df['contig_id'] = mg_headers
+			mg_tetra_df.set_index('contig_id', inplace=True)
+			mg_tetra_df.to_csv(join(save_path, mg_id + '.tsv'), sep='\t')
 
-	# MG subseqs L-mer hash, compare to SAG hashes
-	if isfile(join(save_path, sag_id + '.kmer_recruit.pkl')): 
-		with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'rb') as p:
-			pass_list = pickle.load(p)
-		print('[SAG+]: Unpickled %s Pass Contigs' % sag_id)
-	else:
-		pass_list = []
-		for mg_header, mg_frag in zip(mg_headers, mg_subs):  # TODO: this is really slow :(
-			tmp, mg_Ls = get_subseqs([(mg_header, mg_frag)], 24, 23)
-			mg_hashes = calc_seg(mg_Ls)
-			mg_hashes.sort(reverse=True)
-			mg_hashes_set = set(mg_hashes)
-			if sag_hashes_set.intersection(mg_hashes_set):
-				print('%s passed identity filter' % mg_header)
-				pass_list.append(mg_header)
-			else:
-				print('%s failed' % mg_header)
-		with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
-			pickle.dump(pass_list, p)
-	
+		# MG subseqs L-mer hash, compare to SAG hashes
+		if isfile(join(save_path, sag_id + '.kmer_recruit.pkl')): 
+			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'rb') as p:
+				pass_list = pickle.load(p)
+			print('[SAG+]: Unpickled %s Pass Contigs' % sag_id)
+		else:
+			pass_list = []
+			for mg_header, mg_frag in zip(mg_headers, mg_subs):  # TODO: this is really slow :(
+				tmp, mg_Ls = get_subseqs([(mg_header, mg_frag)], 24, 23)
+				mg_hashes = calc_seg(mg_Ls)
+				mg_hashes.sort(reverse=True)
+				mg_hashes_set = set(mg_hashes)
+				if sag_hashes_set.intersection(mg_hashes_set):
+					print('%s passed identity filter' % mg_header)
+					pass_list.append(mg_header)
+				else:
+					print('%s failed' % mg_header)
+			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
+				pickle.dump(pass_list, p)
+		
+		### Used for seq tracking and error analysis
+		# Look at ID filter (idf) error types
+		sag_tetra_df['idf_errors'] = ['SAG' for x in sag_tetra_df.index]
+		mg_idf_errors = []
+		for index in mg_tetra_df.index:
+			trimmed_index = index.rsplit('_', 1)[0]
+			if (index in pass_list) and (trimmed_index in sag_raw_contig_headers):
+				mg_idf_errors.append('TruePos')
+			elif (index in pass_list) and (trimmed_index not in sag_raw_contig_headers):
+					mg_idf_errors.append('FalsePos')
+			elif (index not in pass_list) and (trimmed_index in sag_raw_contig_headers):
+				mg_idf_errors.append('FalseNeg')
+			elif (index not in pass_list) and (trimmed_index not in sag_raw_contig_headers):
+				mg_idf_errors.append('TrueNeg')
+		mg_tetra_df['idf_errors'] = mg_idf_errors
+		concat_df = pd.concat([sag_tetra_df, mg_tetra_df])
+		#idf_errors = concat_df['idf_errors']
+		sorter = ['TrueNeg', 'TruePos', 'SAG', 'FalseNeg', 'FalsePos']
+		sorterIndex = dict(zip(sorter,range(len(sorter))))
+		concat_df['Rank'] = concat_df['idf_errors'].map(sorterIndex)
+		concat_df.sort_values(by=['Rank'], inplace=True)
+		sorted_subseq_ids = concat_df.index.values
+		idf_df = concat_df.set_index('idf_errors')
+		idf_df.drop(['Rank'], axis=1, inplace=True)
+		### END
+
+		features = idf_df.values
+		targets = idf_df.index.values
+		targets_ints = [x[0] for x in enumerate(targets, start=0)]
+
+		data = plot_umap(idf_df, save_path, n_neighbors=30, min_dist=0.0,
+									n_components=2, random_state=42
+									)
+		umap_df = pd.DataFrame(data, columns=['pc1', 'pc2'], index=targets)
+		sag_umap_df = umap_df.loc[umap_df.index == 'SAG']
+		sag_std = sag_umap_df.std().values
+		sag_mean = sag_umap_df.mean().values
+		sag_covar = sag_umap_df.cov().values
+
+		### Used for seq tracking and error analysis
+		# Draw ellispe that colors by error stats
+		plot_ellispe_error(umap_df, sag_id, save_path, sag_mean, sag_covar)
+		### END
+
+		# Draw ellispe that colors by membership
+		membership_df = plot_ellispe_membership(umap_df, sag_id, save_path,
+												sag_mean, sag_covar)
+		# add subseq mapping
+		membership_df['subseq_header'] = sorted_subseq_ids
+		
+		### Used for seq tracking and error analysis
+		# preserve idf errors
+		membership_df['idf_errors'] = membership_df.index
+		# Look at tetramer Hz filter (thf) error types
+		mg_thf_errors = []
+		for index, row in membership_df.iterrows():
+			header = row['subseq_header']
+			isSAG = row['isSAG']
+			trimmed_header = header.rsplit('_', 1)[0]
+			if (isSAG == 1) and (trimmed_header in sag_raw_contig_headers):
+				mg_thf_errors.append('TruePos')
+			elif (isSAG == 1) and (trimmed_header not in sag_raw_contig_headers):
+					mg_thf_errors.append('FalsePos')
+			elif (isSAG != 1) and (trimmed_header in sag_raw_contig_headers):
+				mg_thf_errors.append('FalseNeg')
+			elif (isSAG != 1) and (trimmed_header not in sag_raw_contig_headers):
+				mg_thf_errors.append('TrueNeg')
+		membership_df['thf_errors'] = mg_thf_errors
+		error_df = calc_err(membership_df)
+		error_df['sag_id'] = sag_id
+		error_df.set_index('sag_id', inplace=True)
+		error_df_list.append(error_df.round(2))
+		### END
+
+		subseq_map_list.append(membership_df)
+
+
+	final_subseq_df = pd.concat(subseq_map_list)
+	final_subseq_df.to_csv(join(save_path, 'total_subseq_map.tsv'), sep='\t')
+
 	### Used for seq tracking and error analysis
-	# Look at ID filter (idf) error types
-	sag_tetra_df['idf_errors'] = ['SAG' for x in sag_tetra_df.index]
-	mg_idf_errors = []
-	for index in mg_tetra_df.index:
-		trimmed_index = index.rsplit('_', 1)[0]
-		if (index in pass_list) and (trimmed_index in sag_raw_contig_headers):
-			mg_idf_errors.append('TruePos')
-		elif (index in pass_list) and (trimmed_index not in sag_raw_contig_headers):
-				mg_idf_errors.append('FalsePos')
-		elif (index not in pass_list) and (trimmed_index in sag_raw_contig_headers):
-			mg_idf_errors.append('FalseNeg')
-		elif (index not in pass_list) and (trimmed_index not in sag_raw_contig_headers):
-			mg_idf_errors.append('TrueNeg')
-	mg_tetra_df['idf_errors'] = mg_idf_errors
-	concat_df = pd.concat([sag_tetra_df, mg_tetra_df])
-	#idf_errors = concat_df['idf_errors']
-	sorter = ['TrueNeg', 'TruePos', 'SAG', 'FalseNeg', 'FalsePos']
-	sorterIndex = dict(zip(sorter,range(len(sorter))))
-	concat_df['Rank'] = concat_df['idf_errors'].map(sorterIndex)
-	concat_df.sort_values(by=['Rank'], inplace=True)
-	sorted_subseq_ids = concat_df.index.values
-	idf_df = concat_df.set_index('idf_errors')
-	idf_df.drop(['Rank'], axis=1, inplace=True)
+	final_err_df = pd.concat(error_df_list)
+	final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
 	### END
 
-	features = idf_df.values
-	targets = idf_df.index.values
-	targets_ints = [x[0] for x in enumerate(targets, start=0)]
+if __name__ == "__main__":
+	main()
 
-	data = plot_umap(idf_df, save_path, n_neighbors=30, min_dist=0.0,
-								n_components=2, random_state=42
-								)
-	umap_df = pd.DataFrame(data, columns=['pc1', 'pc2'], index=targets)
-	sag_umap_df = umap_df.loc[umap_df.index == 'SAG']
-	sag_std = sag_umap_df.std().values
-	sag_mean = sag_umap_df.mean().values
-	sag_covar = sag_umap_df.cov().values
 
-	### Used for seq tracking and error analysis
-	# Draw ellispe that colors by error stats
-	plot_ellispe_error(umap_df, sag_id, save_path, sag_mean, sag_covar)
-	### END
-
-	# Draw ellispe that colors by membership
-	membership_df = plot_ellispe_membership(umap_df, sag_id, save_path,
-											sag_mean, sag_covar)
-	# add subseq mapping
-	membership_df['subseq_header'] = sorted_subseq_ids
 	
-	### Used for seq tracking and error analysis
-	# preserve idf errors
-	membership_df['idf_errors'] = membership_df.index
-	# Look at tetramer Hz filter (thf) error types
-	mg_thf_errors = []
-	for index, row in membership_df.iterrows():
-		header = row['subseq_header']
-		isSAG = row['isSAG']
-		trimmed_header = header.rsplit('_', 1)[0]
-		if (isSAG == 1) and (trimmed_header in sag_raw_contig_headers):
-			mg_thf_errors.append('TruePos')
-		elif (isSAG == 1) and (trimmed_header not in sag_raw_contig_headers):
-				mg_thf_errors.append('FalsePos')
-		elif (isSAG != 1) and (trimmed_header in sag_raw_contig_headers):
-			mg_thf_errors.append('FalseNeg')
-		elif (isSAG != 1) and (trimmed_header not in sag_raw_contig_headers):
-			mg_thf_errors.append('TrueNeg')
-	membership_df['thf_errors'] = mg_thf_errors
-	error_df = calc_err(membership_df)
-	error_df['sag_id'] = sag_id
-	error_df.set_index('sag_id', inplace=True)
-	error_df_list.append(error_df.round(2))
-	### END
 
-	subseq_map_list.append(membership_df)
-
-
-final_subseq_df = pd.concat(subseq_map_list)
-final_subseq_df.to_csv(join(save_path, 'total_subseq_map.tsv'), sep='\t')
-
-### Used for seq tracking and error analysis
-final_err_df = pd.concat(error_df_list)
-final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
-### END
-
-
-
-
+################################################################
+### ANYTHING BELOW THIS IS JUNK, WILL BE NUKED AT SOME POINT ###
+################################################################
 
 
 # Messing with GMMs (no idea why)
@@ -511,51 +518,6 @@ gmm = GMM(n_components=min_bic_comp, covariance_type='full',
 			random_state=42).fit(sag_umap_df.values)
 plot_gmm(sag_id, save_path, gmm, data, targets)
 '''
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # Old code
 
 '''
