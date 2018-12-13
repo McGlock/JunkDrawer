@@ -1,7 +1,7 @@
 import sys
 from os import listdir
 from os.path import isfile, join
-from itertools import islice
+from itertools import islice, product
 import pandas as pd
 import numpy as np
 import matplotlib
@@ -30,61 +30,10 @@ sns.set(style='white', context='notebook', rc={'figure.figsize':(14,10)})
 
 
 def tetra_cnt(seq_list):
-	tetra_cnt_dict = {'aaaa': [], 'aaat': [], 'aaag': [], 'aaac': [], 'aata': [],
-					'aatt': [], 'aatg': [], 'aatc': [], 'aaga': [], 'aagt': [],
-					'aagg': [], 'aagc': [], 'aaca': [], 'aact': [], 'aacg': [],
-					'aacc': [], 'ataa': [], 'atat': [], 'atag': [], 'atac': [],
-					'atta': [], 'attt': [], 'attg': [], 'attc': [], 'atga': [],
-					'atgt': [], 'atgg': [], 'atgc': [], 'atca': [], 'atct': [], 
-					'atcg': [], 'atcc': [], 'agaa': [], 'agat': [], 'agag': [],
-					'agac': [], 'agta': [], 'agtt': [], 'agtg': [], 'agtc': [],
-					'agga': [], 'aggt': [], 'aggg': [], 'aggc': [], 'agca': [],
-					'agct': [], 'agcg': [], 'agcc': [], 'acaa': [], 'acat': [],
-					'acag': [], 'acac': [], 'acta': [], 'actt': [], 'actg': [],
-					'actc': [], 'acga': [], 'acgt': [], 'acgg': [], 'acgc': [], 
-					'acca': [], 'acct': [], 'accg': [], 'accc': [], 'taaa': [],
-					'taat': [], 'taag': [], 'taac': [], 'tata': [], 'tatt': [],
-					'tatg': [], 'tatc': [], 'taga': [], 'tagt': [], 'tagg': [],
-					'tagc': [], 'taca': [], 'tact': [], 'tacg': [], 'tacc': [],
-					'ttaa': [], 'ttat': [], 'ttag': [], 'ttac': [], 'ttta': [],
-					'tttt': [], 'tttg': [], 'tttc': [], 'ttga': [], 'ttgt': [], 
-					'ttgg': [], 'ttgc': [], 'ttca': [], 'ttct': [], 'ttcg': [],
-					'ttcc': [], 'tgaa': [], 'tgat': [], 'tgag': [], 'tgac': [],
-					'tgta': [], 'tgtt': [], 'tgtg': [], 'tgtc': [], 'tgga': [],
-					'tggt': [], 'tggg': [], 'tggc': [], 'tgca': [], 'tgct': [],
-					'tgcg': [], 'tgcc': [], 'tcaa': [], 'tcat': [], 'tcag': [],
-					'tcac': [], 'tcta': [], 'tctt': [], 'tctg': [], 'tctc': [], 
-					'tcga': [], 'tcgt': [], 'tcgg': [], 'tcgc': [], 'tcca': [],
-					'tcct': [], 'tccg': [], 'tccc': [], 'gaaa': [], 'gaat': [],
-					'gaag': [], 'gaac': [], 'gata': [], 'gatt': [], 'gatg': [],
-					'gatc': [], 'gaga': [], 'gagt': [], 'gagg': [], 'gagc': [],
-					'gaca': [], 'gact': [], 'gacg': [], 'gacc': [], 'gtaa': [],
-					'gtat': [], 'gtag': [], 'gtac': [], 'gtta': [], 'gttt': [], 
-					'gttg': [], 'gttc': [], 'gtga': [], 'gtgt': [], 'gtgg': [],
-					'gtgc': [], 'gtca': [], 'gtct': [], 'gtcg': [], 'gtcc': [],
-					'ggaa': [], 'ggat': [], 'ggag': [], 'ggac': [], 'ggta': [],
-					'ggtt': [], 'ggtg': [], 'ggtc': [], 'ggga': [], 'gggt': [],
-					'gggg': [], 'gggc': [], 'ggca': [], 'ggct': [], 'ggcg': [],
-					'ggcc': [], 'gcaa': [], 'gcat': [], 'gcag': [], 'gcac': [], 
-					'gcta': [], 'gctt': [], 'gctg': [], 'gctc': [], 'gcga': [],
-					'gcgt': [], 'gcgg': [], 'gcgc': [], 'gcca': [], 'gcct': [],
-					'gccg': [], 'gccc': [], 'caaa': [], 'caat': [], 'caag': [],
-					'caac': [], 'cata': [], 'catt': [], 'catg': [], 'catc': [],
-					'caga': [], 'cagt': [], 'cagg': [], 'cagc': [], 'caca': [],
-					'cact': [], 'cacg': [], 'cacc': [], 'ctaa': [], 'ctat': [], 
-					'ctag': [], 'ctac': [], 'ctta': [], 'cttt': [], 'cttg': [],
-					'cttc': [], 'ctga': [], 'ctgt': [], 'ctgg': [], 'ctgc': [],
-					'ctca': [], 'ctct': [], 'ctcg': [], 'ctcc': [], 'cgaa': [],
-					'cgat': [], 'cgag': [], 'cgac': [], 'cgta': [], 'cgtt': [],
-					'cgtg': [], 'cgtc': [], 'cgga': [], 'cggt': [], 'cggg': [],
-					'cggc': [], 'cgca': [], 'cgct': [], 'cgcg': [], 'cgcc': [], 
-					'ccaa': [], 'ccat': [], 'ccag': [], 'ccac': [], 'ccta': [], 
-					'cctt': [], 'cctg': [], 'cctc': [], 'ccga': [], 'ccgt': [],
-					'ccgg': [], 'ccgc': [], 'ccca': [], 'ccct': [], 'cccg': [],
-					'cccc': []
-					}  # TODO: can I build this on the fly?
+	# Dict of all tetramers
+	tetra_cnt_dict = {''.join(x):[] for x in product('atgc', repeat=4)}
 
-	# count up all kmers and also populate the tetra dict
+	# count up all tetramers and also populate the tetra dict
 	for seq in seq_list:
 		tmp_dict = {k: 0 for k, v in tetra_cnt_dict.items()}
 		total_kmer_cnt = 0
@@ -371,7 +320,7 @@ for sag_file in sag_list:
 	'''
 	sag_tetra_df = pd.read_csv(join(save_path, sag_id + '.tsv'), sep='\t', index_col=0,
 							header=0)
-	print('Opened SAG tetranucleotide tsv file')
+	print('Opened %s SAG tetranucleotide tsv file' % sag_id)
 	'''
 	# SAG L-seg hash
 	tmp, sag_Ls = get_subseqs(sag_contigs, 24, 23)
@@ -421,36 +370,37 @@ for sag_file in sag_list:
 		pass_list = pickle.load(p)
 	print('Unpickled MG Pass Contigs')
 
-	# Set indices for UMAP colorcoding
-	sag_tetra_df['grouping'] = ['SAG' for x in sag_tetra_df.index]
-	mg_new_index = []
+	# Look at ID filter (idf) error types
+	sag_tetra_df['idf_errors'] = ['SAG' for x in sag_tetra_df.index]
+	mg_idf_errors = []
 	for index in mg_tetra_df.index:
 		trimmed_index = index.rsplit('_', 1)[0]
 		if (index in pass_list) and (trimmed_index in sag_raw_contig_headers):
-			mg_new_index.append('TruePos')
+			mg_idf_errors.append('TruePos')
 		elif (index in pass_list) and (trimmed_index not in sag_raw_contig_headers):
-				mg_new_index.append('FalsePos')
+				mg_idf_errors.append('FalsePos')
 		elif (index not in pass_list) and (trimmed_index in sag_raw_contig_headers):
-			mg_new_index.append('FalseNeg')
+			mg_idf_errors.append('FalseNeg')
 		elif (index not in pass_list) and (trimmed_index not in sag_raw_contig_headers):
-			mg_new_index.append('TrueNeg')
+			mg_idf_errors.append('TrueNeg')
 
-	mg_tetra_df['grouping'] = mg_new_index
+	mg_tetra_df['idf_errors'] = mg_idf_errors
 
 	concat_df = pd.concat([sag_tetra_df, mg_tetra_df])
-	grouping = concat_df['grouping']
+	#idf_errors = concat_df['idf_errors']
 	sorter = ['TrueNeg', 'TruePos', 'SAG', 'FalseNeg', 'FalsePos']
 	sorterIndex = dict(zip(sorter,range(len(sorter))))
-	concat_df['Rank'] = concat_df['grouping'].map(sorterIndex)
-	group_df = concat_df.set_index('grouping')
-	group_df.sort_values(by=['Rank'], inplace=True)
-	group_df.drop(['Rank'], axis=1, inplace=True)
+	concat_df['Rank'] = concat_df['idf_errors'].map(sorterIndex)
+	concat_df.sort_values(by=['Rank'], inplace=True)
+	sorted_subseq_ids = concat_df.index.values
+	idf_df = concat_df.set_index('idf_errors')
+	idf_df.drop(['Rank'], axis=1, inplace=True)
 
-	features = group_df.values
-	targets = group_df.index.values
+	features = idf_df.values
+	targets = idf_df.index.values
 	targets_ints = [x[0] for x in enumerate(targets, start=0)]
 
-	data = plot_umap(group_df, save_path, n_neighbors=30, min_dist=0.0,
+	data = plot_umap(idf_df, save_path, n_neighbors=30, min_dist=0.0,
 								n_components=2, random_state=42
 								)
 	umap_df = pd.DataFrame(data, columns=['pc1', 'pc2'], index=targets)
@@ -463,17 +413,55 @@ for sag_file in sag_list:
 	# Draw ellispe that colors by membership
 	membership_df = plot_ellispe_membership(umap_df, sag_id, save_path,
 											sag_mean, sag_covar)
-	membership_df['subseq_header'] = list(concat_df.index)
-	mem_nosag_df = membership_df.loc[membership_df.index != 'SAG']
-	subseq_map_list.append(mem_nosag_df)
-	error_df = mem_nosag_df.groupby(mem_nosag_df.index)[['isSAG']].count()
-	error_df.reset_index(inplace=True)
-	error_df.columns = ['err_type', 'kmer_err']
-	error_df['recruited'] = mem_nosag_df.groupby(mem_nosag_df.index)[['isSAG']].sum().values
+	# add subseq mapping
+	membership_df['subseq_header'] = sorted_subseq_ids
+	# preserve idf errors
+	membership_df['idf_errors'] = membership_df.index
+	# Look at tetramer Hz filter (thf) error types
+	mg_thf_errors = []
+	for index, row in membership_df.iterrows():
+		header = row['subseq_header']
+		isSAG = row['isSAG']
+		trimmed_header = header.rsplit('_', 1)[0]
+		if (isSAG == 1) and (trimmed_header in sag_raw_contig_headers):
+			mg_thf_errors.append('TruePos')
+		elif (isSAG == 1) and (trimmed_header not in sag_raw_contig_headers):
+				mg_thf_errors.append('FalsePos')
+		elif (isSAG != 1) and (trimmed_header in sag_raw_contig_headers):
+			mg_thf_errors.append('FalseNeg')
+		elif (isSAG != 1) and (trimmed_header not in sag_raw_contig_headers):
+			mg_thf_errors.append('TrueNeg')
+	membership_df['thf_errors'] = mg_thf_errors
+
+	subseq_map_list.append(membership_df)
+
+	# build error type df
+	idf_cnt_df = membership_df.groupby('idf_errors')['pc1'].count().reset_index()
+	idf_cnt_df.columns = ['err_type', 'idf_errors']
+	idf_TP = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'TruePos', 'idf_errors'].values[0]
+	idf_FP = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'FalsePos', 'idf_errors'].values[0]
+	idf_FN = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'FalseNeg', 'idf_errors'].values[0]
+	idf_TN = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'TrueNeg', 'idf_errors'].values[0]
+	
+	idf_cnt_df['idf_precision'] = idf_TP/(idf_TP + idf_FP)
+	idf_cnt_df['idf_sensitivity'] = idf_TP/(idf_TP + idf_FN)
+	idf_cnt_df['idf_specificity'] = idf_TN/(idf_TN + idf_FP)
+
+	thf_cnt_df = membership_df.groupby('thf_errors')['pc1'].count().reset_index()
+	thf_cnt_df.columns = ['err_type', 'thf_errors']
+	thf_TP = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'TruePos', 'thf_errors'].values[0]
+	thf_FP = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'FalsePos', 'thf_errors'].values[0]
+	thf_FN = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'FalseNeg', 'thf_errors'].values[0]
+	thf_TN = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'TrueNeg', 'thf_errors'].values[0]
+	
+	thf_cnt_df['thf_precision'] = thf_TP/(thf_TP + thf_FP)
+	thf_cnt_df['thf_sensitivity'] = thf_TP/(thf_TP + thf_FN)
+	thf_cnt_df['idf_specificity'] = thf_TN/(thf_TN + thf_FP)
+	
+	error_df = pd.merge(idf_cnt_df, thf_cnt_df, on='err_type')
 	error_df['sag_id'] = sag_id
 	error_df.set_index('sag_id', inplace=True)
-	print(error_df)
-	error_df_list.append(error_df)
+	error_df_list.append(error_df.round(2))
 
 
 final_subseq_df = pd.concat(subseq_map_list)
