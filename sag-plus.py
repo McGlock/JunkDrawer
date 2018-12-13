@@ -285,6 +285,32 @@ def plot_ellispe_error(df, prefix, sv_pth, mean, covar):
 	plt.savefig(plot_save_path, bbox_inches="tight")
 	plt.clf()
 
+def calc_err(df):
+	# build error type df
+	idf_cnt_df = membership_df.groupby('idf_errors')['pc1'].count().reset_index()
+	idf_cnt_df.columns = ['err_type', 'idf_errors']
+	idf_TP = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'TruePos', 'idf_errors'].values[0]
+	idf_FP = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'FalsePos', 'idf_errors'].values[0]
+	idf_FN = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'FalseNeg', 'idf_errors'].values[0]
+	idf_TN = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'TrueNeg', 'idf_errors'].values[0]
+	
+	idf_cnt_df['idf_precision'] = idf_TP/(idf_TP + idf_FP)
+	idf_cnt_df['idf_sensitivity'] = idf_TP/(idf_TP + idf_FN)
+	idf_cnt_df['idf_specificity'] = idf_TN/(idf_TN + idf_FP)
+
+	thf_cnt_df = membership_df.groupby('thf_errors')['pc1'].count().reset_index()
+	thf_cnt_df.columns = ['err_type', 'thf_errors']
+	thf_TP = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'TruePos', 'thf_errors'].values[0]
+	thf_FP = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'FalsePos', 'thf_errors'].values[0]
+	thf_FN = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'FalseNeg', 'thf_errors'].values[0]
+	thf_TN = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'TrueNeg', 'thf_errors'].values[0]
+	
+	thf_cnt_df['thf_precision'] = thf_TP/(thf_TP + thf_FP)
+	thf_cnt_df['thf_sensitivity'] = thf_TP/(thf_TP + thf_FN)
+	thf_cnt_df['idf_specificity'] = thf_TN/(thf_TN + thf_FP)
+
+	error_df = pd.merge(idf_cnt_df, thf_cnt_df, on='err_type')
+	return error_df
 
 
 ### Start Main ###
@@ -435,30 +461,7 @@ for sag_file in sag_list:
 
 	subseq_map_list.append(membership_df)
 
-	# build error type df
-	idf_cnt_df = membership_df.groupby('idf_errors')['pc1'].count().reset_index()
-	idf_cnt_df.columns = ['err_type', 'idf_errors']
-	idf_TP = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'TruePos', 'idf_errors'].values[0]
-	idf_FP = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'FalsePos', 'idf_errors'].values[0]
-	idf_FN = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'FalseNeg', 'idf_errors'].values[0]
-	idf_TN = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'TrueNeg', 'idf_errors'].values[0]
-	
-	idf_cnt_df['idf_precision'] = idf_TP/(idf_TP + idf_FP)
-	idf_cnt_df['idf_sensitivity'] = idf_TP/(idf_TP + idf_FN)
-	idf_cnt_df['idf_specificity'] = idf_TN/(idf_TN + idf_FP)
-
-	thf_cnt_df = membership_df.groupby('thf_errors')['pc1'].count().reset_index()
-	thf_cnt_df.columns = ['err_type', 'thf_errors']
-	thf_TP = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'TruePos', 'thf_errors'].values[0]
-	thf_FP = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'FalsePos', 'thf_errors'].values[0]
-	thf_FN = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'FalseNeg', 'thf_errors'].values[0]
-	thf_TN = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'TrueNeg', 'thf_errors'].values[0]
-	
-	thf_cnt_df['thf_precision'] = thf_TP/(thf_TP + thf_FP)
-	thf_cnt_df['thf_sensitivity'] = thf_TP/(thf_TP + thf_FN)
-	thf_cnt_df['idf_specificity'] = thf_TN/(thf_TN + thf_FP)
-	
-	error_df = pd.merge(idf_cnt_df, thf_cnt_df, on='err_type')
+	error_df = calc_err(membership_df)
 	error_df['sag_id'] = sag_id
 	error_df.set_index('sag_id', inplace=True)
 	error_df_list.append(error_df.round(2))
