@@ -214,15 +214,15 @@ def plot_umap(df, sv_pth='./', n_neighbors=15, min_dist=0.1,
 	targets_ints = [x[0] for x in enumerate(targets, start=0)]
 
 	embedding = fit.fit_transform(features)
-	ax = sns.scatterplot(x=embedding[:, 0], y=embedding[:, 1], hue=targets)
-	plt.gca().set_aspect('equal', 'datalim')
-	plt.title(title, fontsize=18)
-	plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-	plot_file_name = '_'.join([str(n_neighbors), str(min_dist),
-								str(n_components), metric]) + '.png'
-	plot_save_path = join(sv_pth, plot_file_name)
-	plt.savefig(plot_save_path, bbox_inches="tight")
-	plt.clf()
+	#ax = sns.scatterplot(x=embedding[:, 0], y=embedding[:, 1], hue=targets)
+	#plt.gca().set_aspect('equal', 'datalim')
+	#plt.title(title, fontsize=18)
+	#plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+	#plot_file_name = '_'.join([str(n_neighbors), str(min_dist),
+	#							str(n_components), metric]) + '.png'
+	#plot_save_path = join(sv_pth, plot_file_name)
+	#plt.savefig(plot_save_path, bbox_inches="tight")
+	#plt.clf()
 	return embedding
 
 
@@ -241,24 +241,84 @@ def draw_ellipse(position, covariance, ax=None, **kwargs):
 	
 	# Draw the Ellipse
 	for nsig in range(1, 4):
-		ax.add_patch(Ellipse(position, nsig * width, nsig * height,
+		nsig_width = nsig * width
+		nsig_height = nsig * height
+		ax.add_patch(Ellipse(position, nsig_width, nsig_height,
 							 angle, **kwargs))
-		
-def plot_gmm(sg_id, sv_pth, gmm, X, targets, label=True, ax=None):
-	labels = gmm.fit(X, targets).predict(X)
-	if label:
-		ax = sns.scatterplot(x=X[:, 0], y=X[:, 1], hue=targets)
-	plt.gca().set_aspect('equal', 'datalim')
 	
-	w_factor = 0.2 / gmm.weights_.max()
+	return position, nsig_width, nsig_height, angle
+
+	
+
+def plot_gmm(sg_id, sv_pth, gmm, X, targets, label=True, ax=None):
+	# Create scatter with error group labels
+	ax = sns.scatterplot(x=X[:, 0], y=X[:, 1], hue=targets)
+	plt.gca().set_aspect('equal', 'datalim')
+	w_factor = 0.1 / gmm.weights_.max()
 	for pos, covar, w in zip(gmm.means_, gmm.covariances_, gmm.weights_):
 		draw_ellipse(pos, covar, alpha=w * w_factor)
 	plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-	plot_file_name = sag_id + '.' + 'GMM_predict.UMAP.png'
+	plot_file_name = sag_id + '.' + 'GMM_error_classes.UMAP.png'
 	plot_save_path = join(save_path, plot_file_name)
 	plt.savefig(plot_save_path, bbox_inches="tight")
 	plt.clf()
+	# Predict labels based on GMM
+	labels = gmm.predict(X)
+	# Get associated probabilities for predicted labels
+	probs = gmm.predict_proba(data)
+	probs_df = pd.DataFrame(data=probs.round(3), index=targets)
+	probs_df.reset_index(inplace=True)
+	# Create scatter with predicted membership labels
+	if label:
+		ax = sns.scatterplot(x=X[:, 0], y=X[:, 1], hue=labels)
+		plt.gca().set_aspect('equal', 'datalim')
+		w_factor = 0.1 / gmm.weights_.max()
+		for pos, covar, w in zip(gmm.means_, gmm.covariances_, gmm.weights_):
+			draw_ellipse(pos, covar, alpha=w * w_factor)
+		plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+		plot_file_name = sag_id + '.' + 'GMM_predicted_labels.UMAP.png'
+		plot_save_path = join(save_path, plot_file_name)
+		plt.savefig(plot_save_path, bbox_inches="tight")
+		plt.clf()
+		probs_df['p_labels'] = labels
 
+	return probs_df
+
+
+def plot_ellispe_membership(prefix, sv_pth, mean, covar):
+	# Draw ellispe that colors by membership
+	position, width, height, angle = draw_ellipse(mean, covar,
+													fill=False, edgecolor='green',
+													linewidth=1, alpha=0.1
+													)
+	cos_angle = np.cos(np.radians(180.-angle))
+	sin_angle = np.sin(np.radians(180.-angle))
+	xc = umap_df['pc1'] - position[0]
+	yc = umap_df['pc2'] - position[1]
+	xct = xc * cos_angle - yc * sin_angle
+	yct = xc * sin_angle + yc * cos_angle 
+	rad_cc = (xct**2/(width/2.)**2) + (yct**2/(height/2.)**2)
+	colors_array = []
+	for r in rad_cc:
+		if r <= 1.:
+			# point in ellipse
+			colors_array.append('green')
+		else:
+			# point not in ellipse
+			colors_array.append('gray')
+	if colors_array[0] == 'green':
+		pal = ['green', 'gray']
+	else:
+		pal = ['gray', 'green']
+	ax = sns.scatterplot(x=umap_df['pc1'], y=umap_df['pc2'], hue=colors_array,
+							palette=pal
+							)
+	plt.gca().set_aspect('equal', 'datalim')
+	ax.get_legend().set_visible(False)
+	plot_file_name = prefix + '.' + 'UMAP_Ellipse_membership.png'
+	plot_save_path = join(sv_pth, plot_file_name)
+	plt.savefig(plot_save_path, bbox_inches="tight")
+	plt.clf()
 
 
 ### Start Main ###
@@ -276,10 +336,10 @@ else:
 
 sag_list = onlyfiles = [join(sag_path, f) for f in listdir(sag_path) if '.fasta' in f]
 
-for sag_file in sag_list:
+for sag_file in sag_list[:1]:
 	# SAG Tetras
 	with open(sag_file.split('.')[0] + '.full.headers', 'r') as f:
-	    sag_raw_contig_headers = [x.replace('>', '') for x in f.read().splitlines()]
+		sag_raw_contig_headers = [x.replace('>', '') for x in f.read().splitlines()]
 	sag_id = sag_file.split('/')[-1].split('.')[0]
 	# Break up contigs into overlapping subseqs
 	sag_contigs = get_seqs(sag_file)
@@ -325,6 +385,7 @@ for sag_file in sag_list:
 	print('Opened MG tetranucleotide tsv file')
 
 	# MG L-seg hash per fragged contig
+	'''
 	pass_list = []
 	for mg_header, mg_frag in zip(mg_headers, mg_subs):
 		tmp, mg_Ls = get_subseqs([(mg_header, mg_frag)], 24, 23)
@@ -338,6 +399,7 @@ for sag_file in sag_list:
 			print('%s failed' % mg_header)
 	with open(join(save_path, mg_id + '.pkl'), 'wb') as p:
 		pickle.dump(pass_list, p)
+	'''
 	with open(join(save_path, mg_id + '.pkl'), 'rb') as p:
 		pass_list = pickle.load(p)
 	print('Unpickled MG Pass Contigs')
@@ -345,7 +407,7 @@ for sag_file in sag_list:
 	# Set indices for UMAP colorcoding
 	sag_tetra_df['grouping'] = ['SAG' for x in sag_tetra_df.index]
 	mg_new_index = []
-	for index in mg_tetra_df.index:  # TODO: breaking with GCF_001580535.SAG.fasta
+	for index in mg_tetra_df.index:
 		trimmed_index = index.rsplit('_', 1)[0]
 		if (index in pass_list) and (trimmed_index in sag_raw_contig_headers):
 			mg_new_index.append('TruePos')
@@ -363,16 +425,17 @@ for sag_file in sag_list:
 	sorter = ['TrueNeg', 'TruePos', 'SAG', 'FalseNeg', 'FalsePos']
 	sorterIndex = dict(zip(sorter,range(len(sorter))))
 	concat_df['Rank'] = concat_df['grouping'].map(sorterIndex)
-	print(concat_df.groupby('grouping')[['aaaa']].count())
-	concat_df.set_index('grouping', inplace=True)
-	concat_df.sort_values(by=['Rank'], inplace=True)
-	concat_df.drop(['Rank'], axis=1, inplace=True)
+	error_stats = concat_df.groupby('grouping')[['aaaa']].count()
+	print(error_stats)
+	group_df = concat_df.set_index('grouping')
+	group_df.sort_values(by=['Rank'], inplace=True)
+	group_df.drop(['Rank'], axis=1, inplace=True)
 
-	features = concat_df.values
-	targets = concat_df.index.values
+	features = group_df.values
+	targets = group_df.index.values
 	targets_ints = [x[0] for x in enumerate(targets, start=0)]
 
-	data = plot_umap(concat_df, save_path, n_neighbors=30, min_dist=0.0,
+	data = plot_umap(group_df, save_path, n_neighbors=30, min_dist=0.0,
 								n_components=2, random_state=42
 								)
 	umap_df = pd.DataFrame(data, columns=['pc1', 'pc2'], index=targets)
@@ -381,14 +444,33 @@ for sag_file in sag_list:
 	sag_mean = sag_umap_df.mean().values
 	sag_covar = sag_umap_df.cov().values
 	ax = sns.scatterplot(x=umap_df['pc1'], y=umap_df['pc2'], hue=umap_df.index)
-	draw_ellipse(sag_mean, sag_covar, alpha=0.05)
-	draw_ellipse(sag_mean, sag_covar, alpha=0.15)
+	# draw ellispe using covariance matrix
+	position, nsig_width, nsig_height, angle = draw_ellipse(sag_mean, sag_covar, alpha=0.1)
 	plt.gca().set_aspect('equal', 'datalim')
 	plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-	plot_file_name = sag_id + '.' + 'UMAP_w_Ellipse.png'
+	plot_file_name = sag_id + '.' + 'UMAP_Error_Ellipse.png'
 	plot_save_path = join(save_path, plot_file_name)
 	plt.savefig(plot_save_path, bbox_inches="tight")
 	plt.clf()
+
+	# Draw ellispe that colors by membership
+	plot_ellispe_membership(sag_id, save_path, sag_mean, sag_covar)
+
+	n_components = np.arange(5, 200, 5)
+	models = [GMM(n, covariance_type='full', random_state=42)
+		  for n in n_components]
+	bics = [model.fit(data).bic(data) for model in models]
+	min_bic_comp = n_components[bics.index(min(bics))]
+	print(min_bic_comp)
+	plt.plot(n_components, bics)
+	plot_save_path = join(save_path, sag_id + '.' + 'GMM_BIC.png')
+	plt.savefig(plot_save_path, bbox_inches="tight")
+	plt.clf()
+	gmm = GMM(n_components=1, covariance_type='full',
+				random_state=42).fit(sag_umap_df.values)
+
+	plot_gmm(sag_id, save_path, gmm, data, targets)
+
 
 
 
