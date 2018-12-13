@@ -338,7 +338,7 @@ for sag_file in sag_list:
 	### Used for seq tracking and error analysis
 	with open(sag_file.split('.')[0] + '.full.headers', 'r') as f:
 		sag_raw_contig_headers = [x.replace('>', '') for x in f.read().splitlines()]
-	### end
+	### END
 
 	sag_id = sag_file.split('/')[-1].split('.')[0]
 	# SAG Tetras
@@ -405,6 +405,7 @@ for sag_file in sag_list:
 		with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
 			pickle.dump(pass_list, p)
 	
+	### Used for seq tracking and error analysis
 	# Look at ID filter (idf) error types
 	sag_tetra_df['idf_errors'] = ['SAG' for x in sag_tetra_df.index]
 	mg_idf_errors = []
@@ -418,9 +419,7 @@ for sag_file in sag_list:
 			mg_idf_errors.append('FalseNeg')
 		elif (index not in pass_list) and (trimmed_index not in sag_raw_contig_headers):
 			mg_idf_errors.append('TrueNeg')
-
 	mg_tetra_df['idf_errors'] = mg_idf_errors
-
 	concat_df = pd.concat([sag_tetra_df, mg_tetra_df])
 	#idf_errors = concat_df['idf_errors']
 	sorter = ['TrueNeg', 'TruePos', 'SAG', 'FalseNeg', 'FalsePos']
@@ -430,6 +429,7 @@ for sag_file in sag_list:
 	sorted_subseq_ids = concat_df.index.values
 	idf_df = concat_df.set_index('idf_errors')
 	idf_df.drop(['Rank'], axis=1, inplace=True)
+	### END
 
 	features = idf_df.values
 	targets = idf_df.index.values
@@ -443,13 +443,19 @@ for sag_file in sag_list:
 	sag_std = sag_umap_df.std().values
 	sag_mean = sag_umap_df.mean().values
 	sag_covar = sag_umap_df.cov().values
+
+	### Used for seq tracking and error analysis
 	# Draw ellispe that colors by error stats
 	plot_ellispe_error(umap_df, sag_id, save_path, sag_mean, sag_covar)
+	### END
+
 	# Draw ellispe that colors by membership
 	membership_df = plot_ellispe_membership(umap_df, sag_id, save_path,
 											sag_mean, sag_covar)
 	# add subseq mapping
 	membership_df['subseq_header'] = sorted_subseq_ids
+	
+	### Used for seq tracking and error analysis
 	# preserve idf errors
 	membership_df['idf_errors'] = membership_df.index
 	# Look at tetramer Hz filter (thf) error types
@@ -467,20 +473,22 @@ for sag_file in sag_list:
 		elif (isSAG != 1) and (trimmed_header not in sag_raw_contig_headers):
 			mg_thf_errors.append('TrueNeg')
 	membership_df['thf_errors'] = mg_thf_errors
-
-	subseq_map_list.append(membership_df)
-
 	error_df = calc_err(membership_df)
 	error_df['sag_id'] = sag_id
 	error_df.set_index('sag_id', inplace=True)
 	error_df_list.append(error_df.round(2))
+	### END
+
+	subseq_map_list.append(membership_df)
 
 
 final_subseq_df = pd.concat(subseq_map_list)
 final_subseq_df.to_csv(join(save_path, 'total_subseq_map.tsv'), sep='\t')
+
+### Used for seq tracking and error analysis
 final_err_df = pd.concat(error_df_list)
 final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
-
+### END
 
 
 
