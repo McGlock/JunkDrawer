@@ -1,6 +1,6 @@
 import sys
 from os import listdir
-from os.path import isfile, join
+from os.path import isfile, join, isdir
 from itertools import islice, product
 import pandas as pd
 import numpy as np
@@ -315,87 +315,96 @@ def calc_err(df):
 
 ### Start Main ###
 sag_path = sys.argv[1]
-#sag_file = sys.argv[1]
 mg_file = sys.argv[2]
 max_contig_len = int(sys.argv[3])
 overlap_len = int(sys.argv[4])
 save_path = sys.argv[5]
 
-if max_contig_len > 0:
-	print('Max contig size is %s bp' % max_contig_len)
-else:
-	print('Not fragmenting contigs')
+# TODO: build argv interface
+# TODO: extract all magic numbers to be built into argv
 
-sag_list = onlyfiles = [join(sag_path, f) for f in listdir(sag_path) if '.fasta' in f]
+if isdir(sag_path):
+	print('[SAG+]: Directory specified, looking for .fasta files within')
+	sag_list = [join(sag_path, f) for f in
+							listdir(sag_path) if '.fasta' in f
+							]
+elif isfile(sag_path):
+	print('[SAG+]: File specified, processing %s' % os.path.basename(sag_path))
+	sag_list = [sag_path]
+
 error_df_list = []
 subseq_map_list = []
 for sag_file in sag_list:
-	# SAG Tetras
+	### Used for seq tracking and error analysis
 	with open(sag_file.split('.')[0] + '.full.headers', 'r') as f:
 		sag_raw_contig_headers = [x.replace('>', '') for x in f.read().splitlines()]
+	### end
+
 	sag_id = sag_file.split('/')[-1].split('.')[0]
-	'''
-	# Break up contigs into overlapping subseqs
-	sag_contigs = get_seqs(sag_file)
-	sag_headers, sag_subs = get_subseqs(sag_contigs, max_contig_len, overlap_len)
-	sag_tetra_df = pd.DataFrame.from_dict(tetra_cnt(sag_subs))
-	sag_tetra_df['contig_id'] = sag_headers
-	sag_tetra_df.set_index('contig_id', inplace=True)
-	print('SAG %s tetranucleotide frequencies calculated' % sag_id)
-	sag_tetra_df.to_csv(join(save_path, sag_id + '.tsv'), sep='\t')
-	'''
-	sag_tetra_df = pd.read_csv(join(save_path, sag_id + '.tsv'), sep='\t', index_col=0,
-							header=0)
-	print('Opened %s SAG tetranucleotide tsv file' % sag_id)
-	'''
-	# SAG L-seg hash
-	tmp, sag_Ls = get_subseqs(sag_contigs, 24, 23)
-	sag_hashes = calc_seg(sag_Ls)
-	sag_hashes.sort(reverse=True)
-	sag_hashes_set = set(sag_hashes)
-	with open(join(save_path, sag_id + '.pkl'), 'wb') as p:
-		pickle.dump(sag_hashes_set, p)
-	'''
-	with open(join(save_path, sag_id + '.pkl'), 'rb') as p:
-		sag_hashes = pickle.load(p)
+	# SAG Tetras
+	if isfile(join(save_path, sag_id + '.tsv')):
+		sag_tetra_df = pd.read_csv(join(save_path, sag_id + '.tsv'), sep='\t', index_col=0,
+								header=0)
+		print('[SAG+]: Found %s SAG tetranucleotide tsv file' % sag_id)
+	else:
+		print('[SAG+]: Calculating tetramer frequencies for %s' % sag_id)
+		sag_contigs = get_seqs(sag_file)
+		sag_headers, sag_subs = get_subseqs(sag_contigs, max_contig_len, overlap_len)
+		sag_tetra_df = pd.DataFrame.from_dict(tetra_cnt(sag_subs))
+		sag_tetra_df['contig_id'] = sag_headers
+		sag_tetra_df.set_index('contig_id', inplace=True)
+		sag_tetra_df.to_csv(join(save_path, sag_id + '.tsv'), sep='\t')
+
+	# SAG subseqs L-mer hash
+	if isfile(join(save_path, sag_id + '.pkl')):
+		with open(join(save_path, sag_id + '.pkl'), 'rb') as p:
+			sag_hashes = pickle.load(p)
+			sag_hashes_set = set(sag_hashes)
+		print('[SAG+]: Unpickled %s L-mer hashes' % sag_id)
+	else:
+		print('[SAG+]: Calculating L-mer hashes for %s' % sag_id)
+		tmp, sag_Ls = get_subseqs(sag_contigs, 24, 23)
+		sag_hashes = calc_seg(sag_Ls)
+		sag_hashes.sort(reverse=True)
 		sag_hashes_set = set(sag_hashes)
-	print('Unpickled SAG L-hashes')
+		with open(join(save_path, sag_id + '.pkl'), 'wb') as p:
+			pickle.dump(sag_hashes_set, p)
 	
 	# MG Tetras
 	mg_id = mg_file.split('/')[-1].split('.')[0]
-	'''
-	mg_contigs = get_seqs(mg_file)
-	# Break up contigs into overlapping subseqs
-	mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
-	mg_tetra_df = pd.DataFrame.from_dict(tetra_cnt(mg_subs))
-	mg_tetra_df['contig_id'] = mg_headers
-	mg_tetra_df.set_index('contig_id', inplace=True)
-	print('MG %s tetranucleotide frequencies calculated' % mg_id)
-	mg_tetra_df.to_csv(join(save_path, mg_id + '.tsv'), sep='\t')
-	'''
-	mg_tetra_df = pd.read_csv(join(save_path, mg_id + '.tsv'), sep='\t', index_col=0,
-							header=0)
-	print('Opened MG tetranucleotide tsv file')
-	'''
-	# MG L-seg hash per fragged contig
-	pass_list = []
-	for mg_header, mg_frag in zip(mg_headers, mg_subs):
-		tmp, mg_Ls = get_subseqs([(mg_header, mg_frag)], 24, 23)
-		mg_hashes = calc_seg(mg_Ls)
-		mg_hashes.sort(reverse=True)
-		mg_hashes_set = set(mg_hashes)
-		if sag_hashes_set.intersection(mg_hashes_set):
-			print('%s passed identity filter' % mg_header)
-			pass_list.append(mg_header)
-		else:
-			print('%s failed' % mg_header)
-	with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
-		pickle.dump(pass_list, p)
-	'''
-	with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'rb') as p:
-		pass_list = pickle.load(p)
-	print('Unpickled MG Pass Contigs')
+	if isfile(join(save_path, mg_id + '.tsv')):
+		mg_tetra_df = pd.read_csv(join(save_path, mg_id + '.tsv'), sep='\t', index_col=0,
+								header=0)
+		print('[SAG+]: Found %s MetaG tetranucleotide tsv file' % mg_id)
+	else:
+		print('[SAG+]: Calculating tetramer frequencies for %s' % mg_id)
+		mg_contigs = get_seqs(mg_file)
+		mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
+		mg_tetra_df = pd.DataFrame.from_dict(tetra_cnt(mg_subs))
+		mg_tetra_df['contig_id'] = mg_headers
+		mg_tetra_df.set_index('contig_id', inplace=True)
+		mg_tetra_df.to_csv(join(save_path, mg_id + '.tsv'), sep='\t')
 
+	# MG subseqs L-mer hash, compare to SAG hashes
+	if isfile(join(save_path, sag_id + '.kmer_recruit.pkl')): 
+		with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'rb') as p:
+			pass_list = pickle.load(p)
+		print('[SAG+]: Unpickled %s Pass Contigs' % sag_id)
+	else:
+		pass_list = []
+		for mg_header, mg_frag in zip(mg_headers, mg_subs):  # TODO: this is really slow :(
+			tmp, mg_Ls = get_subseqs([(mg_header, mg_frag)], 24, 23)
+			mg_hashes = calc_seg(mg_Ls)
+			mg_hashes.sort(reverse=True)
+			mg_hashes_set = set(mg_hashes)
+			if sag_hashes_set.intersection(mg_hashes_set):
+				print('%s passed identity filter' % mg_header)
+				pass_list.append(mg_header)
+			else:
+				print('%s failed' % mg_header)
+		with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
+			pickle.dump(pass_list, p)
+	
 	# Look at ID filter (idf) error types
 	sag_tetra_df['idf_errors'] = ['SAG' for x in sag_tetra_df.index]
 	mg_idf_errors = []
