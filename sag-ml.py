@@ -465,7 +465,8 @@ for sag_file in sag_list:
 	error_df.reset_index(inplace=True)
 	error_df.columns = ['err_type', 'kmer_err']
 	error_df['umap_err'] = mem_nosag_df.groupby(mem_nosag_df.index)[['isSAG']].sum().values
-	error_df.set_index(sag_id, inplace=True)
+	error_df['sag_id'] = sag_id
+	error_df.set_index('sag_id', inplace=True)
 	print(error_df)
 	error_df_list.append(error_df)
 
