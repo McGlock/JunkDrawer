@@ -423,7 +423,7 @@ def main():
 				if sag_hashes_set.intersection(mg_hashes_set):
 					#print('%s passed identity filter' % mg_header)
 					pass_list.append(mg_header)
-				else:
+				#else:
 					#print('%s failed' % mg_header)
 			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
 				pickle.dump(pass_list, p)
