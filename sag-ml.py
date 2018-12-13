@@ -285,40 +285,57 @@ def plot_gmm(sg_id, sv_pth, gmm, X, targets, label=True, ax=None):
 	return probs_df
 
 
-def plot_ellispe_membership(prefix, sv_pth, mean, covar):
+def plot_ellispe_membership(df, prefix, sv_pth, mean, covar):
 	# Draw ellispe that colors by membership
 	position, width, height, angle = draw_ellipse(mean, covar,
-													fill=False, edgecolor='green',
+													edgecolor='green',
 													linewidth=1, alpha=0.1
 													)
 	cos_angle = np.cos(np.radians(180.-angle))
 	sin_angle = np.sin(np.radians(180.-angle))
-	xc = umap_df['pc1'] - position[0]
-	yc = umap_df['pc2'] - position[1]
+	xc = df['pc1'] - position[0]
+	yc = df['pc2'] - position[1]
 	xct = xc * cos_angle - yc * sin_angle
 	yct = xc * sin_angle + yc * cos_angle 
 	rad_cc = (xct**2/(width/2.)**2) + (yct**2/(height/2.)**2)
-	colors_array = []
+	membr_category = []
 	for r in rad_cc:
 		if r <= 1.:
 			# point in ellipse
-			colors_array.append('green')
+			membr_category.append('SAG+')
 		else:
 			# point not in ellipse
-			colors_array.append('gray')
-	if colors_array[0] == 'green':
+			membr_category.append('Not SAG')
+	if membr_category[0] == 'SAG+':
 		pal = ['green', 'gray']
 	else:
 		pal = ['gray', 'green']
-	ax = sns.scatterplot(x=umap_df['pc1'], y=umap_df['pc2'], hue=colors_array,
+	ax = sns.scatterplot(x=df['pc1'], y=df['pc2'], hue=membr_category,
 							palette=pal
 							)
 	plt.gca().set_aspect('equal', 'datalim')
-	ax.get_legend().set_visible(False)
+	plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 	plot_file_name = prefix + '.' + 'UMAP_Ellipse_membership.png'
 	plot_save_path = join(sv_pth, plot_file_name)
 	plt.savefig(plot_save_path, bbox_inches="tight")
 	plt.clf()
+	# add membership to df
+	df['isSAG'] = [1 if x == 'SAG+' else 0 for x in membr_category]
+
+	return df
+
+
+def plot_ellispe_error(df, prefix, sv_pth, mean, covar):
+	# Draw ellispe that colors by error stats
+	ax = sns.scatterplot(x=umap_df['pc1'], y=umap_df['pc2'], hue=umap_df.index)
+	draw_ellipse(mean, covar, alpha=0.1)
+	plt.gca().set_aspect('equal', 'datalim')
+	plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+	plot_file_name = prefix + '.' + 'UMAP_Error_Ellipse.png'
+	plot_save_path = join(sv_pth, plot_file_name)
+	plt.savefig(plot_save_path, bbox_inches="tight")
+	plt.clf()
+
 
 
 ### Start Main ###
@@ -425,8 +442,6 @@ for sag_file in sag_list[:1]:
 	sorter = ['TrueNeg', 'TruePos', 'SAG', 'FalseNeg', 'FalsePos']
 	sorterIndex = dict(zip(sorter,range(len(sorter))))
 	concat_df['Rank'] = concat_df['grouping'].map(sorterIndex)
-	error_stats = concat_df.groupby('grouping')[['aaaa']].count()
-	print(error_stats)
 	group_df = concat_df.set_index('grouping')
 	group_df.sort_values(by=['Rank'], inplace=True)
 	group_df.drop(['Rank'], axis=1, inplace=True)
@@ -443,19 +458,25 @@ for sag_file in sag_list[:1]:
 	sag_std = sag_umap_df.std().values
 	sag_mean = sag_umap_df.mean().values
 	sag_covar = sag_umap_df.cov().values
-	ax = sns.scatterplot(x=umap_df['pc1'], y=umap_df['pc2'], hue=umap_df.index)
-	# draw ellispe using covariance matrix
-	position, nsig_width, nsig_height, angle = draw_ellipse(sag_mean, sag_covar, alpha=0.1)
-	plt.gca().set_aspect('equal', 'datalim')
-	plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-	plot_file_name = sag_id + '.' + 'UMAP_Error_Ellipse.png'
-	plot_save_path = join(save_path, plot_file_name)
-	plt.savefig(plot_save_path, bbox_inches="tight")
-	plt.clf()
-
+	# Draw ellispe that colors by error stats
+	plot_ellispe_error(umap_df, sag_id, save_path, sag_mean, sag_covar)
 	# Draw ellispe that colors by membership
-	plot_ellispe_membership(sag_id, save_path, sag_mean, sag_covar)
+	membership_df = plot_ellispe_membership(umap_df, sag_id, save_path,
+											sag_mean, sag_covar)
+	mem_nosag_df = membership_df.loc[membership_df.index != 'SAG']
+	kmer_errors = mem_nosag_df.groupby(mem_nosag_df.index)[['isSAG']].count()
+	umap_errors = mem_nosag_df.groupby(mem_nosag_df.index)[['isSAG']].sum()
 
+	error_df = pd.DataFrame([kmer_errors.values,umap_errors.values],
+							columns=['kmer_errs', 'umap_errs'],
+							index=mem_nosag_df.index
+							)
+	print(error_df)
+
+
+
+	# Messing with GMMs (no idea why)
+	'''
 	n_components = np.arange(5, 200, 5)
 	models = [GMM(n, covariance_type='full', random_state=42)
 		  for n in n_components]
@@ -466,10 +487,15 @@ for sag_file in sag_list[:1]:
 	plot_save_path = join(save_path, sag_id + '.' + 'GMM_BIC.png')
 	plt.savefig(plot_save_path, bbox_inches="tight")
 	plt.clf()
-	gmm = GMM(n_components=1, covariance_type='full',
+	gmm = GMM(n_components=min_bic_comp, covariance_type='full',
 				random_state=42).fit(sag_umap_df.values)
-
 	plot_gmm(sag_id, save_path, gmm, data, targets)
+	'''
+
+
+
+
+
 
 
 
