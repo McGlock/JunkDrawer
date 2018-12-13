@@ -1,6 +1,6 @@
 import sys
 from os import listdir
-from os.path import isfile, join, isdir, basename
+from os.path import isfile, join, isdir, basename, dirname
 from itertools import islice, product
 import pandas as pd
 import numpy as np
@@ -314,6 +314,19 @@ def calc_err(df):
 	return error_df
 
 
+def mock_SAG(fasta_file):
+	# currently just returns half of the genome as a mock SAG
+	genome_contigs = get_seqs(fasta_file)
+	if len(genome_contigs) != 1:
+		half_list = genome_contigs[::2]
+	else:
+		header = genome_contigs[0][0]
+		seq = genome_contigs[0][1]
+		half_list = [(header,seq[:int(len(seq)/2)])]
+	all_headers = [x[0] for x in genome_contigs]
+	return half_list, all_headers
+
+
 def main():
 	sag_path = sys.argv[1]
 	mg_file = sys.argv[2]
@@ -341,28 +354,29 @@ def main():
 		sag_basename = basename(sag_file)
 		sag_id = sag_basename.split('.')[0]
 		
-		### Used for seq tracking and error analysis
-		with open(sag_file.split('.')[0] + '.full.headers', 'r') as f:
-			sag_raw_contig_headers = [x.replace('>', '') for x in f.read().splitlines()]
-		### END
-		
 		# SAG Tetras
-		if isfile(join(save_path, sag_id + '.tsv')):
-			sag_tetra_df = pd.read_csv(join(save_path, sag_id + '.tsv'), sep='\t', index_col=0,
+		if isfile(join(dirname(sag_path), sag_id + '.tsv')):
+			sag_tetra_df = pd.read_csv(join(dirname(sag_path), sag_id + '.tsv'), sep='\t', index_col=0,
 									header=0)
+			with open(join(dirname(sag_path), sag_id + '.headers.pkl'), 'rb') as p:
+				sag_raw_contig_headers = pickle.load(p)
 			print('[SAG+]: Found %s SAG tetranucleotide tsv file' % sag_id)
 		else:
 			print('[SAG+]: Calculating tetramer frequencies for %s' % sag_id)
-			sag_contigs = get_seqs(sag_file)
+			### Used for Mock SAGs (need to change when done testing)
+			sag_contigs, sag_raw_contig_headers = mock_SAG(sag_file)
+			#sag_contigs = get_seqs(sag_file)
 			sag_headers, sag_subs = get_subseqs(sag_contigs, max_contig_len, overlap_len)
 			sag_tetra_df = pd.DataFrame.from_dict(tetra_cnt(sag_subs))
 			sag_tetra_df['contig_id'] = sag_headers
 			sag_tetra_df.set_index('contig_id', inplace=True)
 			sag_tetra_df.to_csv(join(save_path, sag_id + '.tsv'), sep='\t')
+			with open(join(dirname(sag_path), sag_id + '.headers.pkl'), 'wb') as p:
+				pickle.dump(sag_raw_contig_headers, p)
 
 		# SAG subseqs L-mer hash
-		if isfile(join(save_path, sag_id + '.pkl')):
-			with open(join(save_path, sag_id + '.pkl'), 'rb') as p:
+		if isfile(join(dirname(sag_path), sag_id + '.pkl')):
+			with open(join(dirname(sag_path), sag_id + '.pkl'), 'rb') as p:
 				sag_hashes = pickle.load(p)
 				sag_hashes_set = set(sag_hashes)
 			print('[SAG+]: Unpickled %s L-mer hashes' % sag_id)
@@ -372,7 +386,7 @@ def main():
 			sag_hashes = calc_seg(sag_Ls)
 			sag_hashes.sort(reverse=True)
 			sag_hashes_set = set(sag_hashes)
-			with open(join(save_path, sag_id + '.pkl'), 'wb') as p:
+			with open(join(dirname(sag_path), sag_id + '.pkl'), 'wb') as p:
 				pickle.dump(sag_hashes_set, p)
 		
 		mg_basename = basename(mg_file)
@@ -493,7 +507,7 @@ def main():
 
 		subseq_map_list.append(membership_df)
 
-		print('[SAG+]: Completed analysis of %s and %s' % [sag_id, mg_id])
+		print('[SAG+]: Completed analysis of %s and %s' % (sag_id, mg_id))
 
 
 
