@@ -460,6 +460,7 @@ for sag_file in sag_list:
 	# Draw ellispe that colors by membership
 	membership_df = plot_ellispe_membership(umap_df, sag_id, save_path,
 											sag_mean, sag_covar)
+	membership_df['subseq_header'] = list(concat_df.index)
 	mem_nosag_df = membership_df.loc[membership_df.index != 'SAG']
 	error_df = mem_nosag_df.groupby(mem_nosag_df.index)[['isSAG']].count()
 	error_df.reset_index(inplace=True)
@@ -469,6 +470,7 @@ for sag_file in sag_list:
 	error_df.set_index('sag_id', inplace=True)
 	print(error_df)
 	error_df_list.append(error_df)
+
 
 final_err_df = pd.concat(error_df_list)
 final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
