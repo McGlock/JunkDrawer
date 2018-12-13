@@ -395,6 +395,8 @@ def main():
 		if isfile(join(save_path, mg_id + '.tsv')):
 			mg_tetra_df = pd.read_csv(join(save_path, mg_id + '.tsv'), sep='\t', index_col=0,
 									header=0)
+			mg_contigs = get_seqs(mg_file)
+			mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
 			print('[SAG+]: Found %s MetaG tetranucleotide tsv file' % mg_id)
 		else:
 			print('[SAG+]: Calculating tetramer frequencies for %s' % mg_id)
