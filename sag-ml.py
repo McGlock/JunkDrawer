@@ -352,8 +352,8 @@ else:
 	print('Not fragmenting contigs')
 
 sag_list = onlyfiles = [join(sag_path, f) for f in listdir(sag_path) if '.fasta' in f]
-
-for sag_file in sag_list[:1]:
+error_df_list = []
+for sag_file in sag_list:
 	# SAG Tetras
 	with open(sag_file.split('.')[0] + '.full.headers', 'r') as f:
 		sag_raw_contig_headers = [x.replace('>', '') for x in f.read().splitlines()]
@@ -361,7 +361,6 @@ for sag_file in sag_list[:1]:
 	# Break up contigs into overlapping subseqs
 	sag_contigs = get_seqs(sag_file)
 	sag_headers, sag_subs = get_subseqs(sag_contigs, max_contig_len, overlap_len)
-	'''
 	sag_tetra_df = pd.DataFrame.from_dict(tetra_cnt(sag_subs))
 	sag_tetra_df['contig_id'] = sag_headers
 	sag_tetra_df.set_index('contig_id', inplace=True)
@@ -384,13 +383,12 @@ for sag_file in sag_list[:1]:
 		sag_hashes = pickle.load(p)
 		sag_hashes_set = set(sag_hashes)
 	print('Unpickled SAG L-hashes')
-
+	'''
 	# MG Tetras
 	mg_id = mg_file.split('/')[-1].split('.')[0]
 	mg_contigs = get_seqs(mg_file)
 	# Break up contigs into overlapping subseqs
 	mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
-	'''
 	mg_tetra_df = pd.DataFrame.from_dict(tetra_cnt(mg_subs))
 	mg_tetra_df['contig_id'] = mg_headers
 	mg_tetra_df.set_index('contig_id', inplace=True)
@@ -400,9 +398,8 @@ for sag_file in sag_list[:1]:
 	mg_tetra_df = pd.read_csv(join(save_path, mg_id + '.tsv'), sep='\t', index_col=0,
 							header=0)
 	print('Opened MG tetranucleotide tsv file')
-
-	# MG L-seg hash per fragged contig
 	'''
+	# MG L-seg hash per fragged contig
 	pass_list = []
 	for mg_header, mg_frag in zip(mg_headers, mg_subs):
 		tmp, mg_Ls = get_subseqs([(mg_header, mg_frag)], 24, 23)
@@ -414,13 +411,13 @@ for sag_file in sag_list[:1]:
 			pass_list.append(mg_header)
 		else:
 			print('%s failed' % mg_header)
-	with open(join(save_path, mg_id + '.pkl'), 'wb') as p:
+	with open(join(save_path, sag_id + 'kmer_recruit.pkl'), 'wb') as p:
 		pickle.dump(pass_list, p)
 	'''
-	with open(join(save_path, mg_id + '.pkl'), 'rb') as p:
+	with open(join(save_path, sag_id + 'kmer_recruit.pkl'), 'rb') as p:
 		pass_list = pickle.load(p)
 	print('Unpickled MG Pass Contigs')
-
+	'''
 	# Set indices for UMAP colorcoding
 	sag_tetra_df['grouping'] = ['SAG' for x in sag_tetra_df.index]
 	mg_new_index = []
@@ -464,33 +461,39 @@ for sag_file in sag_list[:1]:
 	membership_df = plot_ellispe_membership(umap_df, sag_id, save_path,
 											sag_mean, sag_covar)
 	mem_nosag_df = membership_df.loc[membership_df.index != 'SAG']
-	kmer_errors = mem_nosag_df.groupby(mem_nosag_df.index)[['isSAG']].count()
-	umap_errors = mem_nosag_df.groupby(mem_nosag_df.index)[['isSAG']].sum()
-
-	error_df = pd.DataFrame([kmer_errors.values,umap_errors.values],
-							columns=['kmer_errs', 'umap_errs'],
-							index=mem_nosag_df.index
-							)
+	error_df = mem_nosag_df.groupby(mem_nosag_df.index)[['isSAG']].count()
+	error_df.reset_index(inplace=True)
+	error_df.columns = ['err_type', 'kmer_err']
+	error_df['umap_err'] = mem_nosag_df.groupby(mem_nosag_df.index)[['isSAG']].sum().values
+	error_df.set_index(sag_id, inplace=True)
 	print(error_df)
+	error_df_list.append(error_df)
+
+final_err_df = pd.concat(error_df_list)
+final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
 
 
 
-	# Messing with GMMs (no idea why)
-	'''
-	n_components = np.arange(5, 200, 5)
-	models = [GMM(n, covariance_type='full', random_state=42)
-		  for n in n_components]
-	bics = [model.fit(data).bic(data) for model in models]
-	min_bic_comp = n_components[bics.index(min(bics))]
-	print(min_bic_comp)
-	plt.plot(n_components, bics)
-	plot_save_path = join(save_path, sag_id + '.' + 'GMM_BIC.png')
-	plt.savefig(plot_save_path, bbox_inches="tight")
-	plt.clf()
-	gmm = GMM(n_components=min_bic_comp, covariance_type='full',
-				random_state=42).fit(sag_umap_df.values)
-	plot_gmm(sag_id, save_path, gmm, data, targets)
-	'''
+
+
+
+
+# Messing with GMMs (no idea why)
+'''
+n_components = np.arange(5, 200, 5)
+models = [GMM(n, covariance_type='full', random_state=42)
+	  for n in n_components]
+bics = [model.fit(data).bic(data) for model in models]
+min_bic_comp = n_components[bics.index(min(bics))]
+print(min_bic_comp)
+plt.plot(n_components, bics)
+plot_save_path = join(save_path, sag_id + '.' + 'GMM_BIC.png')
+plt.savefig(plot_save_path, bbox_inches="tight")
+plt.clf()
+gmm = GMM(n_components=min_bic_comp, covariance_type='full',
+			random_state=42).fit(sag_umap_df.values)
+plot_gmm(sag_id, save_path, gmm, data, targets)
+'''
 
 
 
