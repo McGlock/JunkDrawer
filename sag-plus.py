@@ -355,10 +355,10 @@ def main():
 		sag_id = sag_basename.split('.')[0]
 		
 		# SAG Tetras
-		if isfile(join(dirname(sag_path), sag_id + '.tsv')):
-			sag_tetra_df = pd.read_csv(join(dirname(sag_path), sag_id + '.tsv'), sep='\t', index_col=0,
+		if isfile(join(save_path, sag_id + '.tsv')):
+			sag_tetra_df = pd.read_csv(join(save_path, sag_id + '.tsv'), sep='\t', index_col=0,
 									header=0)
-			with open(join(dirname(sag_path), sag_id + '.headers.pkl'), 'rb') as p:
+			with open(join(save_path, sag_id + '.headers.pkl'), 'rb') as p:
 				sag_raw_contig_headers = pickle.load(p)
 			print('[SAG+]: Found %s SAG tetranucleotide tsv file' % sag_id)
 		else:
@@ -371,12 +371,12 @@ def main():
 			sag_tetra_df['contig_id'] = sag_headers
 			sag_tetra_df.set_index('contig_id', inplace=True)
 			sag_tetra_df.to_csv(join(save_path, sag_id + '.tsv'), sep='\t')
-			with open(join(dirname(sag_path), sag_id + '.headers.pkl'), 'wb') as p:
+			with open(join(save_path, sag_id + '.headers.pkl'), 'wb') as p:
 				pickle.dump(sag_raw_contig_headers, p)
 
 		# SAG subseqs L-mer hash
-		if isfile(join(dirname(sag_path), sag_id + '.pkl')):
-			with open(join(dirname(sag_path), sag_id + '.pkl'), 'rb') as p:
+		if isfile(join(save_path, sag_id + '.pkl')):
+			with open(join(save_path, sag_id + '.pkl'), 'rb') as p:
 				sag_hashes = pickle.load(p)
 				sag_hashes_set = set(sag_hashes)
 			print('[SAG+]: Unpickled %s L-mer hashes' % sag_id)
@@ -386,7 +386,7 @@ def main():
 			sag_hashes = calc_seg(sag_Ls)
 			sag_hashes.sort(reverse=True)
 			sag_hashes_set = set(sag_hashes)
-			with open(join(dirname(sag_path), sag_id + '.pkl'), 'wb') as p:
+			with open(join(save_path, sag_id + '.pkl'), 'wb') as p:
 				pickle.dump(sag_hashes_set, p)
 		
 		mg_basename = basename(mg_file)
@@ -411,8 +411,9 @@ def main():
 		if isfile(join(save_path, sag_id + '.kmer_recruit.pkl')): 
 			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'rb') as p:
 				pass_list = pickle.load(p)
-			print('[SAG+]: Unpickled %s Pass Contigs' % sag_id)
+			print('[SAG+]: Unpickled %s L-mer ID filter' % sag_id)
 		else:
+			print('[SAG+]: Performing L-mer ID filter' % sag_id)
 			pass_list = []
 			for mg_header, mg_frag in zip(mg_headers, mg_subs):  # TODO: this is really slow :(
 				tmp, mg_Ls = get_subseqs([(mg_header, mg_frag)], 24, 23)
@@ -420,10 +421,10 @@ def main():
 				mg_hashes.sort(reverse=True)
 				mg_hashes_set = set(mg_hashes)
 				if sag_hashes_set.intersection(mg_hashes_set):
-					print('%s passed identity filter' % mg_header)
+					#print('%s passed identity filter' % mg_header)
 					pass_list.append(mg_header)
 				else:
-					print('%s failed' % mg_header)
+					#print('%s failed' % mg_header)
 			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
 				pickle.dump(pass_list, p)
 		
