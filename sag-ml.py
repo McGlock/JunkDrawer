@@ -353,11 +353,13 @@ else:
 
 sag_list = onlyfiles = [join(sag_path, f) for f in listdir(sag_path) if '.fasta' in f]
 error_df_list = []
+subseq_map_list = []
 for sag_file in sag_list:
 	# SAG Tetras
 	with open(sag_file.split('.')[0] + '.full.headers', 'r') as f:
 		sag_raw_contig_headers = [x.replace('>', '') for x in f.read().splitlines()]
 	sag_id = sag_file.split('/')[-1].split('.')[0]
+	'''
 	# Break up contigs into overlapping subseqs
 	sag_contigs = get_seqs(sag_file)
 	sag_headers, sag_subs = get_subseqs(sag_contigs, max_contig_len, overlap_len)
@@ -383,9 +385,10 @@ for sag_file in sag_list:
 		sag_hashes = pickle.load(p)
 		sag_hashes_set = set(sag_hashes)
 	print('Unpickled SAG L-hashes')
-	'''
+	
 	# MG Tetras
 	mg_id = mg_file.split('/')[-1].split('.')[0]
+	'''
 	mg_contigs = get_seqs(mg_file)
 	# Break up contigs into overlapping subseqs
 	mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
@@ -417,7 +420,7 @@ for sag_file in sag_list:
 	with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'rb') as p:
 		pass_list = pickle.load(p)
 	print('Unpickled MG Pass Contigs')
-	'''
+
 	# Set indices for UMAP colorcoding
 	sag_tetra_df['grouping'] = ['SAG' for x in sag_tetra_df.index]
 	mg_new_index = []
@@ -462,16 +465,19 @@ for sag_file in sag_list:
 											sag_mean, sag_covar)
 	membership_df['subseq_header'] = list(concat_df.index)
 	mem_nosag_df = membership_df.loc[membership_df.index != 'SAG']
+	subseq_map_list.append(mem_nosag_df)
 	error_df = mem_nosag_df.groupby(mem_nosag_df.index)[['isSAG']].count()
 	error_df.reset_index(inplace=True)
 	error_df.columns = ['err_type', 'kmer_err']
-	error_df['umap_err'] = mem_nosag_df.groupby(mem_nosag_df.index)[['isSAG']].sum().values
+	error_df['recruited'] = mem_nosag_df.groupby(mem_nosag_df.index)[['isSAG']].sum().values
 	error_df['sag_id'] = sag_id
 	error_df.set_index('sag_id', inplace=True)
 	print(error_df)
 	error_df_list.append(error_df)
 
 
+final_subseq_df = pd.concat(subseq_map_list)
+final_subseq_df.to_csv(join(save_path, 'total_subseq_map.tsv'), sep='\t')
 final_err_df = pd.concat(error_df_list)
 final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
 
