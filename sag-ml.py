@@ -82,7 +82,7 @@ def tetra_cnt(seq_list):
 					'cctt': [], 'cctg': [], 'cctc': [], 'ccga': [], 'ccgt': [],
 					'ccgg': [], 'ccgc': [], 'ccca': [], 'ccct': [], 'cccg': [],
 					'cccc': []
-					}  # build empty dict or tetranucleotide counting
+					}  # TODO: can I build this on the fly?
 
 	# count up all kmers and also populate the tetra dict
 	for seq in seq_list:
@@ -411,10 +411,10 @@ for sag_file in sag_list:
 			pass_list.append(mg_header)
 		else:
 			print('%s failed' % mg_header)
-	with open(join(save_path, sag_id + 'kmer_recruit.pkl'), 'wb') as p:
+	with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
 		pickle.dump(pass_list, p)
 	'''
-	with open(join(save_path, sag_id + 'kmer_recruit.pkl'), 'rb') as p:
+	with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'rb') as p:
 		pass_list = pickle.load(p)
 	print('Unpickled MG Pass Contigs')
 	'''
