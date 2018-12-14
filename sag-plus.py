@@ -373,14 +373,14 @@ def main():
 			with open(join(save_path, sag_id + '.headers.pkl'), 'wb') as p:
 				pickle.dump(sag_raw_contig_headers, p)
 
-		# SAG subseqs L-mer hash
+		# SAG subseqs kmer hashing
 		if isfile(join(save_path, sag_id + '.pkl')):
 			with open(join(save_path, sag_id + '.pkl'), 'rb') as p:
 				sag_hashes = pickle.load(p)
 				sag_hashes_set = set(sag_hashes)
-			print('[SAG+]: Unpickled %s L-mer hashes' % sag_id)
+			print('[SAG+]: Unpickled %s kmer hashes' % sag_id)
 		else:
-			print('[SAG+]: Calculating L-mer hashes for %s' % sag_id)
+			print('[SAG+]: Calculating kmer hashes for %s' % sag_id)
 			tmp, sag_Ls = get_subseqs(sag_contigs, 24, 23)
 			sag_hashes = calc_seg(sag_Ls)
 			sag_hashes.sort(reverse=True)
@@ -410,9 +410,9 @@ def main():
 		if isfile(join(save_path, sag_id + '.kmer_recruit.pkl')): 
 			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'rb') as p:
 				pass_list = pickle.load(p)
-			print('[SAG+]: Unpickled %s L-mer ID filter' % sag_id)
+			print('[SAG+]: Unpickled %s kmer ID filter' % sag_id)
 		else:
-			print('[SAG+]: Performing L-mer ID filter')
+			print('[SAG+]: Performing kmer ID filtering')
 			pass_list = []
 			for mg_header, mg_frag in zip(mg_headers, mg_subs):  # TODO: this is really slow :(
 				tmp, mg_Ls = get_subseqs([(mg_header, mg_frag)], 24, 23)
