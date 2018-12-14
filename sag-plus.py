@@ -335,6 +335,7 @@ def main():
 	# TODO: build argv interface
 	# TODO: extract all magic numbers to be built into argv
 	# TODO: Refactor all definitions, they are a mess :/
+	# TODO: Fit UMAP output to model and test with AIC, which model fits best?
 
 	if isdir(sag_path):
 		print('[SAG+]: Directory specified, looking for .fasta files within')
