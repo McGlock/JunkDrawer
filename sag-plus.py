@@ -100,14 +100,15 @@ def get_frags(seq, l_max, o_lap):
 				frag = seq[i:i+l_max]
 			else:
 				frag = seq[-l_max:]
-			if any(nuc in frag for nuc in nuc_naughty_list):
-				1+1  # TODO: not sure how to handle these
-			else:
-				seq_frags.append(frag)
-	elif 'n' not in seq:
-		seq_frags.append(seq)
+			#if any(nuc in frag for nuc in nuc_naughty_list):
+			#	1+1  # TODO: not sure how to handle these
+			#else:
+			seq_frags.append(frag)
+	#elif 'n' not in seq:
 	else:
-		1+1  # TODO: not sure how to handle these
+		seq_frags.append(seq)
+	#else:
+	#	1+1  # TODO: not sure how to handle these
 	return seq_frags
 
 def get_subseqs(seq_list, n, o_lap):
@@ -355,8 +356,8 @@ def main():
 		# SAG Tetras
 		if isfile(join(save_path, sag_id + '.tsv')):
 			sag_contigs, sag_raw_contig_headers = mock_SAG(sag_file)
-			sag_tetra_df = pd.read_csv(join(save_path, sag_id + '.tsv'), sep='\t', index_col=0,
-									header=0)
+			sag_tetra_df = pd.read_csv(join(save_path, sag_id + '.tsv'),
+										sep='\t', index_col=0, header=0)
 
 			with open(join(save_path, sag_id + '.headers.pkl'), 'rb') as p:
 				sag_raw_contig_headers = pickle.load(p)
@@ -467,19 +468,20 @@ def main():
 		sag_std = sag_umap_df.std().values
 		sag_mean = sag_umap_df.mean().values
 		sag_covar = sag_umap_df.cov().values
+		sag_corr = sag_umap_df.corr().values
 
 		### Used for seq tracking and error analysis
 		# Draw ellispe that colors by L-mer error stats
 		print('[SAG+]: Plotting clusting with L-mer error stats')
-		print('[SAG+]: Including SAG covariance distribution ellispe')
-		plot_ellispe_error(umap_df, sag_id, save_path, sag_mean, sag_covar)
+		print('[SAG+]: Including SAG correlation distribution ellispe')
+		plot_ellispe_error(umap_df, sag_id, save_path, sag_mean, sag_corr)
 		### END
 
 		# Draw ellispe that colors by membership
 		print('[SAG+]: Plotting clusting with subcontig membership')
-		print('[SAG+]: Including SAG covariance distribution ellispe')
+		print('[SAG+]: Including SAG correlation distribution ellispe')
 		membership_df = plot_ellispe_membership(umap_df, sag_id, save_path,
-												sag_mean, sag_covar)
+												sag_mean, sag_corr)
 		# add subseq mapping
 		membership_df['subseq_header'] = sorted_subseq_ids
 		
