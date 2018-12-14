@@ -29,10 +29,13 @@ import pickle
 sns.set(style='white', context='notebook', rc={'figure.figsize':(14,10)})
 
 
+nuc_naughty_list = ['r', 'y', 's', 'w', 'k',
+					'm', 'b', 'd', 'h', 'v', 'n']
+
+
 def tetra_cnt(seq_list):
 	# Dict of all tetramers
 	tetra_cnt_dict = {''.join(x):[] for x in product('atgc', repeat=4)}
-
 	# count up all tetramers and also populate the tetra dict
 	for seq in seq_list:
 		tmp_dict = {k: 0 for k, v in tetra_cnt_dict.items()}
@@ -74,7 +77,7 @@ def tetra_cnt(seq_list):
 	return dedupped_df
 
 
-def get_kmer(seq, n):  # found on internet
+def get_kmer(seq, n):
 	"Returns a sliding window (of width n) over data from the iterable"
 	"   s -> (s0,s1,...s[n-1]), (s1,s2,...,sn), ...				   "
 	it = iter(seq)
@@ -86,7 +89,7 @@ def get_kmer(seq, n):  # found on internet
 		yield result
 
 
-def get_frags(seq, l_max, o_lap):  # not sure about this function, probs shouldn't use it
+def get_frags(seq, l_max, o_lap):
 	"Fragments seq into subseqs of length l_max and overlap of o_lap"
 	"Leftover tail overlaps with tail-1"
 	seq_frags = []
@@ -97,12 +100,14 @@ def get_frags(seq, l_max, o_lap):  # not sure about this function, probs shouldn
 				frag = seq[i:i+l_max]
 			else:
 				frag = seq[-l_max:]
-			if 'n' not in frag:
+			if any(nuc in frag for nuc in nuc_naughty_list):
+				1+1  # TODO: not sure how to handle these
+			else:
 				seq_frags.append(frag)
 	elif 'n' not in seq:
 		seq_frags.append(seq)
 	else:
-		print('You have Ns in your seqs :(')
+		1+1  # TODO: not sure how to handle these
 	return seq_frags
 
 def get_subseqs(seq_list, n, o_lap):
@@ -137,7 +142,8 @@ def calc_seg(subseqs):
 	for seq in subseqs:
 		seg_sum = 0
 		for i, nuc in enumerate(seq, start=0):
-			seg_sum += calc_nuc(nuc, i)
+			if nuc not in nuc_naughty_list:  # TODO: don't know what to do with these
+				seg_sum += calc_nuc(nuc, i)
 		seg_list.append(seg_sum)
 	return seg_list
 
@@ -163,15 +169,6 @@ def plot_umap(df, sv_pth='./', n_neighbors=15, min_dist=0.1,
 	targets_ints = [x[0] for x in enumerate(targets, start=0)]
 
 	embedding = fit.fit_transform(features)
-	#ax = sns.scatterplot(x=embedding[:, 0], y=embedding[:, 1], hue=targets)
-	#plt.gca().set_aspect('equal', 'datalim')
-	#plt.title(title, fontsize=18)
-	#plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-	#plot_file_name = '_'.join([str(n_neighbors), str(min_dist),
-	#							str(n_components), metric]) + '.png'
-	#plot_save_path = join(sv_pth, plot_file_name)
-	#plt.savefig(plot_save_path, bbox_inches="tight")
-	#plt.clf()
 	return embedding
 
 
@@ -356,8 +353,10 @@ def main():
 		
 		# SAG Tetras
 		if isfile(join(save_path, sag_id + '.tsv')):
+			sag_contigs, sag_raw_contig_headers = mock_SAG(sag_file)
 			sag_tetra_df = pd.read_csv(join(save_path, sag_id + '.tsv'), sep='\t', index_col=0,
 									header=0)
+
 			with open(join(save_path, sag_id + '.headers.pkl'), 'rb') as p:
 				sag_raw_contig_headers = pickle.load(p)
 			print('[SAG+]: Found %s SAG tetranucleotide tsv file' % sag_id)
@@ -413,7 +412,7 @@ def main():
 				pass_list = pickle.load(p)
 			print('[SAG+]: Unpickled %s L-mer ID filter' % sag_id)
 		else:
-			print('[SAG+]: Performing L-mer ID filter' % sag_id)
+			print('[SAG+]: Performing L-mer ID filter')
 			pass_list = []
 			for mg_header, mg_frag in zip(mg_headers, mg_subs):  # TODO: this is really slow :(
 				tmp, mg_Ls = get_subseqs([(mg_header, mg_frag)], 24, 23)
