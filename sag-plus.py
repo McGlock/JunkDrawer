@@ -333,6 +333,9 @@ def main():
 	overlap_len = int(sys.argv[5])
 	save_path = sys.argv[6]
 
+	# magic numbers
+	num_components = 2
+
 	# TODO: build argv interface
 	# TODO: extract all magic numbers to be built into argv
 	# TODO: Refactor all definitions, they are a mess :/
@@ -461,18 +464,19 @@ def main():
 
 		print('[SAG+]: Dimension reduction with UMAP')
 		data = plot_umap(idf_df, save_path, n_neighbors=30, min_dist=0.0,
-									n_components=2, random_state=42
+									n_components=num_components, random_state=42
 									)
-		umap_df = pd.DataFrame(data, columns=['pc1', 'pc2'], index=targets)
+		pc_col_names = ['pc' + str(x) for x in range(1, num_components + 1)]
+		umap_df = pd.DataFrame(data, columns=pc_col_names, index=targets)
 		sag_umap_df = umap_df.loc[umap_df.index == 'SAG']
 		sag_std = sag_umap_df.std().values
 		sag_mean = sag_umap_df.mean().values
-		sag_covar = sag_umap_df.cov().values
+		#sag_covar = sag_umap_df.cov().values
 		sag_corr = sag_umap_df.corr().values
 
 		### Used for seq tracking and error analysis
 		# Draw ellispe that colors by L-mer error stats
-		print('[SAG+]: Plotting clusting with L-mer error stats')
+		print('[SAG+]: Plotting clusting with kmer error stats')
 		print('[SAG+]: Including SAG correlation distribution ellispe')
 		plot_ellispe_error(umap_df, sag_id, save_path, sag_mean, sag_corr)
 		### END
@@ -482,6 +486,7 @@ def main():
 		print('[SAG+]: Including SAG correlation distribution ellispe')
 		membership_df = plot_ellispe_membership(umap_df, sag_id, save_path,
 												sag_mean, sag_corr)
+
 		# add subseq mapping
 		membership_df['subseq_header'] = sorted_subseq_ids
 		
