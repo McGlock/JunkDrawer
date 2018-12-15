@@ -382,10 +382,10 @@ def main():
 
 		# SAG coverage info
 		sag_abund_df = pd.read_csv(sag_abund_file, header=0, sep='\t')
-		sag_tot_depth = [(x[0], sag_abund_df.loc[sag_abund_df['contigName']
-								== x[0]]['totalAvgDepth'].values[0])
+		sag_tot_depth_dict = {x[0]: sag_abund_df.loc[sag_abund_df['contigName']
+								== x[0]]['totalAvgDepth'].values[0]
 								for x in sag_contigs
-								]
+								}
 		
 		# SAG subseqs kmer hashing
 		if isfile(join(save_path, sag_id + '.pkl')):
@@ -402,14 +402,14 @@ def main():
 			with open(join(save_path, sag_id + '.pkl'), 'wb') as p:
 				pickle.dump(sag_hashes_set, p)
 		
+		# MG Tetras
 		mg_basename = basename(mg_file)
 		mg_id = mg_basename.split('.')[0]
-		# MG Tetras
 		if isfile(join(save_path, mg_id + '.tsv')):
 			mg_tetra_df = pd.read_csv(join(save_path, mg_id + '.tsv'), sep='\t', index_col=0,
 									header=0)
 			mg_contigs = get_seqs(mg_file)
-			mg_contigs_trm_header = [(x[0].rsplit('|', 1)[1], x[1]) for x in mg_contigs]
+			mg_contigs_trm_header = [(x[0].rsplit('|', 1)[0], x[1]) for x in mg_contigs]
 			mg_headers, mg_subs = get_subseqs(mg_contigs_trm_header, max_contig_len, overlap_len)
 			print('[SAG+]: Found %s MetaG tetranucleotide tsv file' % mg_id)
 		else:
@@ -424,10 +424,10 @@ def main():
 
 		# MetaG coverage info
 		mg_abund_df = pd.read_csv(mg_abund_file, header=0, sep='\t')
-		mg_tot_depth = [(x[0], mg_abund_df.loc[mg_abund_df['contigName']
-								== x[0].rsplit('|', 1)[0]]['totalAvgDepth'].values[0])
+		mg_tot_depth_dict = {x[0].rsplit('|', 1)[0]: mg_abund_df.loc[mg_abund_df['contigName']
+								== x[0].rsplit('|', 1)[0]]['totalAvgDepth'].values[0]
 								for x in mg_contigs
-								]
+								}
 
 		# MG subseqs L-mer hash, compare to SAG hashes
 		if isfile(join(save_path, sag_id + '.kmer_recruit.pkl')): 
@@ -465,7 +465,16 @@ def main():
 			elif (index not in pass_list) and (trimmed_index not in sag_raw_contig_headers):
 				mg_idf_errors.append('TrueNeg')
 		mg_tetra_df['idf_errors'] = mg_idf_errors
+		# Set MetaG contig index to genome id for error tracking
+		mg_contig_genome_index = [x[0].rsplit('|', 1)[1] for x in mg_headers]
+		mg_tetra_df.set_index(mg_contig_genome_index, inplace=True)
+		
+		# Add coverage info for SAG/MetaG to dataframe
+		sag_tetra_df['totalAvgDepth'] = [sag_tot_depth_dict[x.rsplit('_', 1)[0]] for x in sag_tetra_df.index]
+		mg_tetra_df['totalAvgDepth'] = [mg_tot_depth_dict[x.rsplit('_', 1)[0]] for x in mg_tetra_df.index]
+
 		concat_df = pd.concat([sag_tetra_df, mg_tetra_df])
+
 		#idf_errors = concat_df['idf_errors']
 		sorter = ['TrueNeg', 'TruePos', 'SAG', 'FalseNeg', 'FalsePos']
 		sorterIndex = dict(zip(sorter,range(len(sorter))))
@@ -475,6 +484,7 @@ def main():
 		idf_df = concat_df.set_index('idf_errors')
 		idf_df.drop(['Rank'], axis=1, inplace=True)
 		### END
+
 
 		features = idf_df.values
 		targets = idf_df.index.values
