@@ -559,7 +559,7 @@ def main():
 			isSAG_val_list = [row[v] for v in isSAG_cols]
 			if sum(isSAG_val_list) == len(isSAG_cols):
 				SAG_pred_list.append(index)
-		print('[SAG+]: Predicted %s subcontigs for SAG %s' % (str(len(SAG_pred_list)), 
+		print('[SAG+]: Predicted %s subcontigs for SAG %s' % (str(len(set(SAG_pred_list))), 
 																sag_id)
 																)
 
@@ -591,7 +591,7 @@ def main():
 		'''
 
 		### Used for seq tracking and error analysis
-		final_err_df = pd.concat(error_df_list)
+		final_err_df = pd.concat(error_df_list)  # TODO: combine error stats into one value
 		final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
 		### END
 		print('[SAG+]: Completed analysis of %s and %s' % (sag_id, mg_id))
