@@ -549,52 +549,52 @@ def main():
 		subseq_map_list.append(pc_pair_subseq_df)
 
 
-	final_subseq_df = pd.concat(subseq_map_list)
-	final_subseq_df.to_csv(join(save_path, 'total_subseq_map.tsv'), sep='\t')
+		final_subseq_df = pd.concat(subseq_map_list)
+		final_subseq_df.to_csv(join(save_path, 'total_subseq_map.tsv'), sep='\t')
 
-	# get all predicted SAGs
-	#SAG_pred_dict = {}
-	SAG_pred_list = []
-	for index, row in final_subseq_df.iterrows():
-		isSAG_val_list = [row[v] for v in isSAG_cols]
-		if sum(isSAG_val_list) == len(isSAG_cols):
-			SAG_pred_list.append(index)
-	print('[SAG+]: Predicted %s subcontigs for SAG %s' % (str(len(SAG_pred_list)), 
-															sag_id)
-															)
+		# get all predicted SAGs
+		#SAG_pred_dict = {}
+		SAG_pred_list = []
+		for index, row in final_subseq_df.iterrows():
+			isSAG_val_list = [row[v] for v in isSAG_cols]
+			if sum(isSAG_val_list) == len(isSAG_cols):
+				SAG_pred_list.append(index)
+		print('[SAG+]: Predicted %s subcontigs for SAG %s' % (str(len(SAG_pred_list)), 
+																sag_id)
+																)
 
-	'''
-		seq_header = index.rsplit('_', 1)[0]
-		if seq_header in SAG_pred_dict.keys():
-			SAG_pred_dict[seq_header].append(sum(isSAG_val_list))
-		else:
-			SAG_pred_dict[seq_header] = [sum(isSAG_val_list)]
-	'''
+		'''
+			seq_header = index.rsplit('_', 1)[0]
+			if seq_header in SAG_pred_dict.keys():
+				SAG_pred_dict[seq_header].append(sum(isSAG_val_list))
+			else:
+				SAG_pred_dict[seq_header] = [sum(isSAG_val_list)]
+		'''
 
-	# Save Predicted SAG contigs to a fasta file
-	with open(fasta_out_file, 'w') as fasta_out:
-		for header, seq in zip(mg_headers, mg_subs):
-			if header in SAG_pred_list:
-				fasta_out.write('\n'.join([header, seq]) + '\n')
-	print('[SAG+]: Predicted subcontigs saved to %s' % basename(fasta_out_file))
+		# Save Predicted SAG contigs to a fasta file
+		with open(fasta_out_file, 'w') as fasta_out:
+			for header, seq in zip(mg_headers, mg_subs):
+				if header in SAG_pred_list:
+					fasta_out.write('\n'.join([header, seq]) + '\n')
+		print('[SAG+]: Predicted subcontigs saved to %s' % basename(fasta_out_file))
 
-	'''
-	# Get only contigs where all subcontigs are in the cluster
-	for key in SAG_pred_dict.keys():
-		sum_all = sum(SAG_pred_dict[key])
-		if sum_all/len(SAG_pred_dict[key]) == len(isSAG_cols):
-			1+1#print(key)
-		elif sum_all/len(SAG_pred_dict[key]) != 0:
-			print(sum_all/len(SAG_pred_dict[key]))
-			print(key)
-			print(SAG_pred_dict[key])
-	'''
+		'''
+		# Get only contigs where all subcontigs are in the cluster
+		for key in SAG_pred_dict.keys():
+			sum_all = sum(SAG_pred_dict[key])
+			if sum_all/len(SAG_pred_dict[key]) == len(isSAG_cols):
+				1+1#print(key)
+			elif sum_all/len(SAG_pred_dict[key]) != 0:
+				print(sum_all/len(SAG_pred_dict[key]))
+				print(key)
+				print(SAG_pred_dict[key])
+		'''
 
-	### Used for seq tracking and error analysis
-	final_err_df = pd.concat(error_df_list)
-	final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
-	### END
-	print('[SAG+]: Completed analysis of %s and %s' % (sag_id, mg_id))
+		### Used for seq tracking and error analysis
+		final_err_df = pd.concat(error_df_list)
+		final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
+		### END
+		print('[SAG+]: Completed analysis of %s and %s' % (sag_id, mg_id))
 
 
 if __name__ == "__main__":
