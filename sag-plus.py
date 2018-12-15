@@ -559,6 +559,10 @@ def main():
 		isSAG_val_list = [row[v] for v in isSAG_cols]
 		if sum(isSAG_val_list) == len(isSAG_cols):
 			SAG_pred_list.append(index)
+	print('[SAG+]: Predicted %s subcontigs for SAG %s' % (str(len(SAG_pred_list)), 
+															sag_id)
+															)
+
 	'''
 		seq_header = index.rsplit('_', 1)[0]
 		if seq_header in SAG_pred_dict.keys():
@@ -572,6 +576,8 @@ def main():
 		for header, seq in zip(mg_headers, mg_subs):
 			if header in SAG_pred_list:
 				fasta_out.write('\n'.join([header, seq]) + '\n')
+	print('[SAG+]: Predicted subcontigs saved to %s' % basename(fasta_out_file))
+
 	'''
 	# Get only contigs where all subcontigs are in the cluster
 	for key in SAG_pred_dict.keys():
