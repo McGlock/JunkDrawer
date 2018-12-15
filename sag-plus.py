@@ -1,7 +1,7 @@
 import sys
 from os import listdir
 from os.path import isfile, join, isdir, basename, dirname
-from itertools import islice, product
+from itertools import islice, product, combinations
 import pandas as pd
 import numpy as np
 import matplotlib
@@ -23,7 +23,7 @@ from sklearn.model_selection import LeaveOneOut
 from sklearn.neighbors import KernelDensity
 from sklearn.base import BaseEstimator, ClassifierMixin
 import pickle
-
+import functools
 
 
 sns.set(style='white', context='notebook', rc={'figure.figsize':(14,10)})
@@ -232,7 +232,7 @@ def plot_gmm(sg_id, sv_pth, gmm, X, targets, label=True, ax=None):
 	return probs_df
 
 
-def plot_ellispe_membership(df, prefix, sv_pth, mean, covar):
+def plot_ellispe_membership(df, plot_save_path, mean, covar):
 	# Draw ellispe that colors by membership
 	position, width, height, angle = draw_ellipse(mean, covar,
 													edgecolor='green',
@@ -240,8 +240,8 @@ def plot_ellispe_membership(df, prefix, sv_pth, mean, covar):
 													)
 	cos_angle = np.cos(np.radians(180.-angle))
 	sin_angle = np.sin(np.radians(180.-angle))
-	xc = df['pc1'] - position[0]
-	yc = df['pc2'] - position[1]
+	xc = df[df.columns[0]] - position[0]
+	yc = df[df.columns[1]] - position[1]
 	xct = xc * cos_angle - yc * sin_angle
 	yct = xc * sin_angle + yc * cos_angle 
 	rad_cc = (xct**2/(width/2.)**2) + (yct**2/(height/2.)**2)
@@ -257,36 +257,34 @@ def plot_ellispe_membership(df, prefix, sv_pth, mean, covar):
 		pal = ['green', 'gray']
 	else:
 		pal = ['gray', 'green']
-	ax = sns.scatterplot(x=df['pc1'], y=df['pc2'], hue=membr_category,
-							palette=pal
+	ax = sns.scatterplot(x=df[df.columns[0]], y=df[df.columns[1]],
+							hue=membr_category,	palette=pal
 							)
 	plt.gca().set_aspect('equal', 'datalim')
 	plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-	plot_file_name = prefix + '.' + 'UMAP_Ellipse_membership.png'
-	plot_save_path = join(sv_pth, plot_file_name)
 	plt.savefig(plot_save_path, bbox_inches="tight")
 	plt.clf()
 	# add membership to df
-	df['isSAG'] = [1 if x == 'SAG+' else 0 for x in membr_category]
+	isSAG_col = '_'.join(['isSAG', df.columns[0], df.columns[1]])
+	df[isSAG_col] = [1 if x == 'SAG+' else 0 for x in membr_category]
+	df.drop(df.columns[:2], axis=1, inplace=True)
 
-	return df
+	return df, isSAG_col
 
 
-def plot_ellispe_error(df, prefix, sv_pth, mean, covar):
+def plot_ellispe_error(df, plot_save_path, mean, covar):
 	# Draw ellispe that colors by error stats
-	ax = sns.scatterplot(x=df['pc1'], y=df['pc2'], hue=df.index)
+	ax = sns.scatterplot(x=df[df.columns[0]], y=df[df.columns[1]], hue=df.index)
 	draw_ellipse(mean, covar, alpha=0.1)
 	plt.gca().set_aspect('equal', 'datalim')
 	plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-	plot_file_name = prefix + '.' + 'UMAP_Error_Ellipse.png'
-	plot_save_path = join(sv_pth, plot_file_name)
 	plt.savefig(plot_save_path, bbox_inches="tight")
 	plt.clf()
 
 
 def calc_err(df):
 	# build error type df
-	idf_cnt_df = df.groupby('idf_errors')['pc1'].count().reset_index()
+	idf_cnt_df = df.groupby('idf_errors')[df.columns[0]].count().reset_index()
 	idf_cnt_df.columns = ['err_type', 'idf_errors']
 	idf_TP = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'TruePos', 'idf_errors'].values[0]
 	idf_FP = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'FalsePos', 'idf_errors'].values[0]
@@ -297,7 +295,7 @@ def calc_err(df):
 	idf_cnt_df['idf_sensitivity'] = idf_TP/(idf_TP + idf_FN)
 	idf_cnt_df['idf_specificity'] = idf_TN/(idf_TN + idf_FP)
 
-	thf_cnt_df = df.groupby('thf_errors')['pc1'].count().reset_index()
+	thf_cnt_df = df.groupby('thf_errors')[df.columns[0]].count().reset_index()
 	thf_cnt_df.columns = ['err_type', 'thf_errors']
 	thf_TP = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'TruePos', 'thf_errors'].values[0]
 	thf_FP = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'FalsePos', 'thf_errors'].values[0]
@@ -306,7 +304,7 @@ def calc_err(df):
 	
 	thf_cnt_df['thf_precision'] = thf_TP/(thf_TP + thf_FP)
 	thf_cnt_df['thf_sensitivity'] = thf_TP/(thf_TP + thf_FN)
-	thf_cnt_df['idf_specificity'] = thf_TN/(thf_TN + thf_FP)
+	thf_cnt_df['thf_specificity'] = thf_TN/(thf_TN + thf_FP)
 
 	error_df = pd.merge(idf_cnt_df, thf_cnt_df, on='err_type')
 	return error_df
@@ -332,9 +330,11 @@ def main():
 	max_contig_len = int(sys.argv[4])
 	overlap_len = int(sys.argv[5])
 	save_path = sys.argv[6]
+	num_components = int(sys.argv[7])
+	fasta_out_file = sys.argv[8]
 
 	# magic numbers
-	num_components = 2
+	#num_components = 2
 
 	# TODO: build argv interface
 	# TODO: extract all magic numbers to be built into argv
@@ -468,66 +468,128 @@ def main():
 									)
 		pc_col_names = ['pc' + str(x) for x in range(1, num_components + 1)]
 		umap_df = pd.DataFrame(data, columns=pc_col_names, index=targets)
-		sag_umap_df = umap_df.loc[umap_df.index == 'SAG']
-		sag_std = sag_umap_df.std().values
-		sag_mean = sag_umap_df.mean().values
-		#sag_covar = sag_umap_df.cov().values
-		sag_corr = sag_umap_df.corr().values
+
+		pc_pair_error_df_list = []
+		pc_pair_subseq_map_list = []
+		isSAG_cols = []
+		for pc_pair in combinations(pc_col_names, 2):
+			pc_pair = list(pc_pair)
+			subset_df = umap_df[pc_pair]
+
+			sag_umap_df = subset_df.loc[subset_df.index == 'SAG']
+			sag_std = sag_umap_df.std().values
+			sag_mean = sag_umap_df.mean().values
+			#sag_covar = sag_umap_df.cov().values
+			sag_corr = sag_umap_df.corr().values
+			### Used for seq tracking and error analysis
+			# Draw ellispe that colors by L-mer error stats
+			print('[SAG+]: Plotting clusting with kmer error stats')
+			print('[SAG+]: Including SAG correlation distribution ellispe')
+			error_file_name = '.'.join([sag_id, '_'.join(pc_pair),
+										'UMAP_Error_Ellipse', 'png'])
+			error_save_path = join(save_path, error_file_name)
+			plot_ellispe_error(subset_df, error_save_path, sag_mean, sag_corr)
+			### END
+
+			# Draw ellispe that colors by membership
+			print('[SAG+]: Plotting clusting with subcontig membership')
+			print('[SAG+]: Including SAG correlation distribution ellispe')
+			memb_file_name = '.'.join([sag_id, '_'.join(pc_pair),
+										'UMAP_Ellipse_membership', 'png'])
+			memb_save_path = join(save_path, memb_file_name)
+			membership_df, isSAG_col = plot_ellispe_membership(subset_df, memb_save_path,
+													sag_mean, sag_corr)
+			isSAG_cols.append(isSAG_col)
+			# add subseq mapping
+			membership_df['subseq_header'] = sorted_subseq_ids
+			
+			### Used for seq tracking and error analysis
+			# preserve idf errors
+			membership_df['idf_errors'] = membership_df.index
+			# Look at tetramer Hz filter (thf) error types
+			print('[SAG+]: Building error type dataframe')
+			mg_thf_errors = []
+			for index, row in membership_df.iterrows():
+				header = row['subseq_header']
+				isSAG = row[isSAG_col]
+				trimmed_header = header.rsplit('_', 1)[0]
+				if (isSAG == 1) and (trimmed_header in sag_raw_contig_headers):
+					mg_thf_errors.append('TruePos')
+				elif (isSAG == 1) and (trimmed_header not in sag_raw_contig_headers):
+						mg_thf_errors.append('FalsePos')
+				elif (isSAG != 1) and (trimmed_header in sag_raw_contig_headers):
+					mg_thf_errors.append('FalseNeg')
+				elif (isSAG != 1) and (trimmed_header not in sag_raw_contig_headers):
+					mg_thf_errors.append('TrueNeg')
+			membership_df['thf_errors'] = mg_thf_errors
+			error_df = calc_err(membership_df)
+			membership_df.drop(columns=['idf_errors', 'thf_errors'],
+								axis=1, inplace=True)
+			membership_df['dimension'] = '_'.join(pc_pair)
+			error_df['sag_id'] = sag_id
+			error_df.set_index('sag_id', inplace=True)
+			error_df['dimension'] = '_'.join(pc_pair)
+			pc_pair_error_df_list.append(error_df)
+			### END
+			pc_pair_subseq_map_list.append(membership_df)
+
+		pc_pair_subseq_df = functools.reduce(lambda x, y: pd.merge(
+															x, y, on=['subseq_header']),
+															pc_pair_subseq_map_list
+															)
+		pc_pair_subseq_df.set_index('subseq_header', inplace=True)
+		pc_pair_subseq_df.to_csv(join(save_path, sag_id + '_subseq_map.tsv'), sep='\t')
 
 		### Used for seq tracking and error analysis
-		# Draw ellispe that colors by L-mer error stats
-		print('[SAG+]: Plotting clusting with kmer error stats')
-		print('[SAG+]: Including SAG correlation distribution ellispe')
-		plot_ellispe_error(umap_df, sag_id, save_path, sag_mean, sag_corr)
+		pc_pair_err_df = pd.concat(pc_pair_error_df_list)
+		pc_pair_err_df.to_csv(join(save_path, sag_id + '_error_stats.tsv'), sep='\t')
 		### END
 
-		# Draw ellispe that colors by membership
-		print('[SAG+]: Plotting clusting with subcontig membership')
-		print('[SAG+]: Including SAG correlation distribution ellispe')
-		membership_df = plot_ellispe_membership(umap_df, sag_id, save_path,
-												sag_mean, sag_corr)
-
-		# add subseq mapping
-		membership_df['subseq_header'] = sorted_subseq_ids
-		
-		### Used for seq tracking and error analysis
-		# preserve idf errors
-		membership_df['idf_errors'] = membership_df.index
-		# Look at tetramer Hz filter (thf) error types
-		print('[SAG+]: Building error type dataframe')
-		mg_thf_errors = []
-		for index, row in membership_df.iterrows():
-			header = row['subseq_header']
-			isSAG = row['isSAG']
-			trimmed_header = header.rsplit('_', 1)[0]
-			if (isSAG == 1) and (trimmed_header in sag_raw_contig_headers):
-				mg_thf_errors.append('TruePos')
-			elif (isSAG == 1) and (trimmed_header not in sag_raw_contig_headers):
-					mg_thf_errors.append('FalsePos')
-			elif (isSAG != 1) and (trimmed_header in sag_raw_contig_headers):
-				mg_thf_errors.append('FalseNeg')
-			elif (isSAG != 1) and (trimmed_header not in sag_raw_contig_headers):
-				mg_thf_errors.append('TrueNeg')
-		membership_df['thf_errors'] = mg_thf_errors
-		error_df = calc_err(membership_df)
-		error_df['sag_id'] = sag_id
-		error_df.set_index('sag_id', inplace=True)
-		error_df_list.append(error_df.round(2))
-		### END
-
-		subseq_map_list.append(membership_df)
-
-		print('[SAG+]: Completed analysis of %s and %s' % (sag_id, mg_id))
-
+		error_df_list.append(pc_pair_err_df)
+		subseq_map_list.append(pc_pair_subseq_df)
 
 
 	final_subseq_df = pd.concat(subseq_map_list)
 	final_subseq_df.to_csv(join(save_path, 'total_subseq_map.tsv'), sep='\t')
 
+	# get all predicted SAGs
+	#SAG_pred_dict = {}
+	SAG_pred_list = []
+	for index, row in final_subseq_df.iterrows():
+		isSAG_val_list = [row[v] for v in isSAG_cols]
+		if sum(isSAG_val_list) == len(isSAG_cols):
+			SAG_pred_list.append(index)
+	'''
+		seq_header = index.rsplit('_', 1)[0]
+		if seq_header in SAG_pred_dict.keys():
+			SAG_pred_dict[seq_header].append(sum(isSAG_val_list))
+		else:
+			SAG_pred_dict[seq_header] = [sum(isSAG_val_list)]
+	'''
+
+	# Save Predicted SAG contigs to a fasta file
+	with open(fasta_out_file, 'w') as fasta_out:
+		for header, seq in zip(mg_headers, mg_subs):
+			if header in SAG_pred_list:
+				fasta_out.write('\n'.join([header, seq]) + '\n')
+	'''
+	# Get only contigs where all subcontigs are in the cluster
+	for key in SAG_pred_dict.keys():
+		sum_all = sum(SAG_pred_dict[key])
+		if sum_all/len(SAG_pred_dict[key]) == len(isSAG_cols):
+			1+1#print(key)
+		elif sum_all/len(SAG_pred_dict[key]) != 0:
+			print(sum_all/len(SAG_pred_dict[key]))
+			print(key)
+			print(SAG_pred_dict[key])
+	'''
+
 	### Used for seq tracking and error analysis
 	final_err_df = pd.concat(error_df_list)
 	final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
 	### END
+	print('[SAG+]: Completed analysis of %s and %s' % (sag_id, mg_id))
+
 
 if __name__ == "__main__":
 	main()
