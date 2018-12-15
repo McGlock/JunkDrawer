@@ -331,7 +331,6 @@ def main():
 	overlap_len = int(sys.argv[5])
 	save_path = sys.argv[6]
 	num_components = int(sys.argv[7])
-	fasta_out_file = sys.argv[8]
 
 	# magic numbers
 	#num_components = 2
@@ -572,6 +571,7 @@ def main():
 		'''
 
 		# Save Predicted SAG contigs to a fasta file
+		fasta_out_file = join(save_path, sag_id + '.predicted_contigs.fasta')
 		with open(fasta_out_file, 'w') as fasta_out:
 			for header, seq in zip(mg_headers, mg_subs):
 				if header in SAG_pred_list:
