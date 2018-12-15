@@ -326,11 +326,12 @@ def mock_SAG(fasta_file):
 def main():
 	sag_path = sys.argv[1]
 	mg_file = sys.argv[2]
-	abund_file = sys.argv[3]
-	max_contig_len = int(sys.argv[4])
-	overlap_len = int(sys.argv[5])
-	save_path = sys.argv[6]
-	num_components = int(sys.argv[7])
+	sag_abund_file = sys.argv[3]
+	mg_abund_file = sys.argv[4]
+	max_contig_len = int(sys.argv[5])
+	overlap_len = int(sys.argv[6])
+	save_path = sys.argv[7]
+	num_components = int(sys.argv[8])
 
 	# magic numbers
 	#num_components = 2
@@ -339,6 +340,8 @@ def main():
 	# TODO: extract all magic numbers to be built into argv
 	# TODO: Refactor all definitions, they are a mess :/
 	# TODO: Fit UMAP output to model and test with AIC, which model fits best?
+	# TODO: combine error into one value, remove subseq map file creation
+	# TODO: add abundance(coverage) data to analysis
 
 	if isdir(sag_path):
 		print('[SAG+]: Directory specified, looking for .fasta files within')
@@ -377,6 +380,13 @@ def main():
 			with open(join(save_path, sag_id + '.headers.pkl'), 'wb') as p:
 				pickle.dump(sag_raw_contig_headers, p)
 
+		# SAG coverage info
+		sag_abund_df = pd.read_csv(sag_abund_file, header=0, sep='\t')
+		sag_tot_depth = [(x[0], sag_abund_df.loc[sag_abund_df['contigName']
+								== x[0]]['totalAvgDepth'].values[0])
+								for x in sag_contigs
+								]
+		
 		# SAG subseqs kmer hashing
 		if isfile(join(save_path, sag_id + '.pkl')):
 			with open(join(save_path, sag_id + '.pkl'), 'rb') as p:
@@ -399,16 +409,25 @@ def main():
 			mg_tetra_df = pd.read_csv(join(save_path, mg_id + '.tsv'), sep='\t', index_col=0,
 									header=0)
 			mg_contigs = get_seqs(mg_file)
-			mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
+			mg_contigs_trm_header = [(x[0].rsplit('|', 1)[1], x[1]) for x in mg_contigs]
+			mg_headers, mg_subs = get_subseqs(mg_contigs_trm_header, max_contig_len, overlap_len)
 			print('[SAG+]: Found %s MetaG tetranucleotide tsv file' % mg_id)
 		else:
 			print('[SAG+]: Calculating tetramer frequencies for %s' % mg_id)
 			mg_contigs = get_seqs(mg_file)
+			mg_contigs_trm_header = [(x[0].rsplit('|', 1)[1], x[1]) for x in mg_contigs]
 			mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
 			mg_tetra_df = pd.DataFrame.from_dict(tetra_cnt(mg_subs))
 			mg_tetra_df['contig_id'] = mg_headers
 			mg_tetra_df.set_index('contig_id', inplace=True)
 			mg_tetra_df.to_csv(join(save_path, mg_id + '.tsv'), sep='\t')
+
+		# MetaG coverage info
+		mg_abund_df = pd.read_csv(mg_abund_file, header=0, sep='\t')
+		mg_tot_depth = [(x[0], mg_abund_df.loc[mg_abund_df['contigName']
+								== x[0].rsplit('|', 1)[0]]['totalAvgDepth'].values[0])
+								for x in mg_contigs
+								]
 
 		# MG subseqs L-mer hash, compare to SAG hashes
 		if isfile(join(save_path, sag_id + '.kmer_recruit.pkl')): 
@@ -531,8 +550,7 @@ def main():
 			pc_pair_error_df_list.append(error_df)
 			### END
 			pc_pair_subseq_map_list.append(membership_df)
-
-		pc_pair_subseq_df = functools.reduce(lambda x, y: pd.merge(
+		pc_pair_subseq_df = functools.reduce(lambda x, y: pd.merge(  # TODO: Eating all the RAMs, find a fix
 															x, y, on=['subseq_header']),
 															pc_pair_subseq_map_list
 															)
@@ -547,14 +565,10 @@ def main():
 		error_df_list.append(pc_pair_err_df)
 		subseq_map_list.append(pc_pair_subseq_df)
 
-
-		final_subseq_df = pd.concat(subseq_map_list)
-		final_subseq_df.to_csv(join(save_path, 'total_subseq_map.tsv'), sep='\t')
-
 		# get all predicted SAGs
 		#SAG_pred_dict = {}
 		SAG_pred_list = []
-		for index, row in final_subseq_df.iterrows():
+		for index, row in pc_pair_subseq_df.iterrows():
 			isSAG_val_list = [row[v] for v in isSAG_cols]
 			if sum(isSAG_val_list) == len(isSAG_cols):
 				SAG_pred_list.append(index)
@@ -589,12 +603,13 @@ def main():
 				print(key)
 				print(SAG_pred_dict[key])
 		'''
-
-		### Used for seq tracking and error analysis
-		final_err_df = pd.concat(error_df_list)  # TODO: combine error stats into one value
-		final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
-		### END
 		print('[SAG+]: Completed analysis of %s and %s' % (sag_id, mg_id))
+	final_subseq_df = pd.concat(subseq_map_list)
+	final_subseq_df.to_csv(join(save_path, 'total_subseq_map.tsv'), sep='\t')
+	### Used for seq tracking and error analysis
+	final_err_df = pd.concat(error_df_list)  # TODO: combine error stats into one value
+	final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
+	### END
 
 
 if __name__ == "__main__":
