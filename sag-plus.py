@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import hdbscan
 import umap
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, normalize
 from sklearn.decomposition import PCA
 from sklearn.datasets import load_iris, load_digits
 from sklearn.model_selection import train_test_split
@@ -380,13 +380,15 @@ def main():
 			with open(join(save_path, sag_id + '.headers.pkl'), 'wb') as p:
 				pickle.dump(sag_raw_contig_headers, p)
 
+		'''
 		# SAG coverage info
 		sag_abund_df = pd.read_csv(sag_abund_file, header=0, sep='\t')
 		sag_tot_depth_dict = {x[0]: sag_abund_df.loc[sag_abund_df['contigName']
 								== x[0]]['totalAvgDepth'].values[0]
 								for x in sag_contigs
 								}
-		
+		'''
+
 		# SAG subseqs kmer hashing
 		if isfile(join(save_path, sag_id + '.pkl')):
 			with open(join(save_path, sag_id + '.pkl'), 'rb') as p:
@@ -409,25 +411,27 @@ def main():
 			mg_tetra_df = pd.read_csv(join(save_path, mg_id + '.tsv'), sep='\t', index_col=0,
 									header=0)
 			mg_contigs = get_seqs(mg_file)
-			mg_contigs_trm_header = [(x[0].rsplit('|', 1)[0], x[1]) for x in mg_contigs]
-			mg_headers, mg_subs = get_subseqs(mg_contigs_trm_header, max_contig_len, overlap_len)
+			#mg_contigs_trm_header = [(x[0].rsplit('|', 1)[0], x[1]) for x in mg_contigs]
+			mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
 			print('[SAG+]: Found %s MetaG tetranucleotide tsv file' % mg_id)
 		else:
 			print('[SAG+]: Calculating tetramer frequencies for %s' % mg_id)
 			mg_contigs = get_seqs(mg_file)
-			mg_contigs_trm_header = [(x[0].rsplit('|', 1)[1], x[1]) for x in mg_contigs]
+			#mg_contigs_trm_header = [(x[0].rsplit('|', 1)[1], x[1]) for x in mg_contigs]
 			mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
 			mg_tetra_df = pd.DataFrame.from_dict(tetra_cnt(mg_subs))
 			mg_tetra_df['contig_id'] = mg_headers
 			mg_tetra_df.set_index('contig_id', inplace=True)
 			mg_tetra_df.to_csv(join(save_path, mg_id + '.tsv'), sep='\t')
 
+		'''
 		# MetaG coverage info
 		mg_abund_df = pd.read_csv(mg_abund_file, header=0, sep='\t')
 		mg_tot_depth_dict = {x[0].rsplit('|', 1)[0]: mg_abund_df.loc[mg_abund_df['contigName']
 								== x[0].rsplit('|', 1)[0]]['totalAvgDepth'].values[0]
 								for x in mg_contigs
 								}
+		'''
 
 		# MG subseqs L-mer hash, compare to SAG hashes
 		if isfile(join(save_path, sag_id + '.kmer_recruit.pkl')): 
@@ -455,9 +459,12 @@ def main():
 		sag_tetra_df['idf_errors'] = ['SAG' for x in sag_tetra_df.index]
 		mg_idf_errors = []
 		for index in mg_tetra_df.index:
-			trimmed_index = index.rsplit('_', 1)[0]
+			trimmed_index = index.rsplit('|', 1)[1].rsplit('_', 1)[0]
+			print(trimmed_index)
+			print(sag_raw_contig_headers[0:5])
 			if (index in pass_list) and (trimmed_index in sag_raw_contig_headers):
 				mg_idf_errors.append('TruePos')
+				print(trimmed_index)
 			elif (index in pass_list) and (trimmed_index not in sag_raw_contig_headers):
 					mg_idf_errors.append('FalsePos')
 			elif (index not in pass_list) and (trimmed_index in sag_raw_contig_headers):
@@ -466,12 +473,30 @@ def main():
 				mg_idf_errors.append('TrueNeg')
 		mg_tetra_df['idf_errors'] = mg_idf_errors
 		# Set MetaG contig index to genome id for error tracking
-		mg_contig_genome_index = [x[0].rsplit('|', 1)[1] for x in mg_headers]
-		mg_tetra_df.set_index(mg_contig_genome_index, inplace=True)
-		
+		mg_contig_index = [x.rsplit('|', 1)[1] for x in mg_tetra_df.index]
+		mg_tetra_df.reset_index(inplace=True)
+		mg_tetra_df['contig_id'] = mg_contig_index
+		mg_tetra_df.set_index('contig_id', inplace=True)
+
+		'''
 		# Add coverage info for SAG/MetaG to dataframe
-		sag_tetra_df['totalAvgDepth'] = [sag_tot_depth_dict[x.rsplit('_', 1)[0]] for x in sag_tetra_df.index]
-		mg_tetra_df['totalAvgDepth'] = [mg_tot_depth_dict[x.rsplit('_', 1)[0]] for x in mg_tetra_df.index]
+		sag_tetra_df['totalAvgDepth'] = [sag_tot_depth_dict[x.rsplit('_', 1)[0]]
+											for x in sag_tetra_df.index
+											]  # TODO: fix to handle N columns of data
+
+		sag_ave_depth = sag_tetra_df[['totalAvgDepth']].values.astype(float)
+		sag_normed_depth = sag_ave_depth #normalize(sag_ave_depth)
+		sag_tetra_df['totalAvgDepth'] = sag_normed_depth
+		print(sag_tetra_df.head())
+		mg_tetra_df['totalAvgDepth'] = [mg_tot_depth_dict[x.rsplit('_', 1)[0]]
+											for x in mg_tetra_df.index
+											]  # TODO: fix to handle N columns of data
+
+		mg_ave_depth = mg_tetra_df[['totalAvgDepth']].values.astype(float)
+		mg_normed_depth = mg_ave_depth #normalize(mg_ave_depth)
+		mg_tetra_df['totalAvgDepth'] = mg_normed_depth
+		print(mg_tetra_df.head())
+		'''
 
 		concat_df = pd.concat([sag_tetra_df, mg_tetra_df])
 
@@ -485,6 +510,22 @@ def main():
 		idf_df.drop(['Rank'], axis=1, inplace=True)
 		### END
 
+		'''
+		scaler = StandardScaler()
+		scaled_df = scaler.fit_transform(idf_df)
+		scaled_df = pd.DataFrame(scaled_df, columns=idf_df.columns)
+
+		#build histograms
+		for index, col in enumerate(scaled_df.columns):
+			hist = scaled_df[col]
+			print(hist[0:10])
+			#fig = hist.get_figure()
+			h_save_file = join(save_path, 'histograms/' + col + '.png')
+			fig = sns.distplot(hist, bins=100)
+			plt.savefig(h_save_file, bbox_inches="tight")
+			plt.clf()
+			print(col)
+		'''
 
 		features = idf_df.values
 		targets = idf_df.index.values
@@ -536,11 +577,16 @@ def main():
 			membership_df['idf_errors'] = membership_df.index
 			# Look at tetramer Hz filter (thf) error types
 			print('[SAG+]: Building error type dataframe')
+			print(membership_df.head())
 			mg_thf_errors = []
 			for index, row in membership_df.iterrows():
 				header = row['subseq_header']
 				isSAG = row[isSAG_col]
 				trimmed_header = header.rsplit('_', 1)[0]
+				if trimmed_header in sag_raw_contig_headers:
+					print(header)
+					print(trimmed_header)
+					#print(row)
 				if (isSAG == 1) and (trimmed_header in sag_raw_contig_headers):
 					mg_thf_errors.append('TruePos')
 				elif (isSAG == 1) and (trimmed_header not in sag_raw_contig_headers):
@@ -550,6 +596,7 @@ def main():
 				elif (isSAG != 1) and (trimmed_header not in sag_raw_contig_headers):
 					mg_thf_errors.append('TrueNeg')
 			membership_df['thf_errors'] = mg_thf_errors
+			print(membership_df.head())
 			error_df = calc_err(membership_df)
 			membership_df.drop(columns=['idf_errors', 'thf_errors'],
 								axis=1, inplace=True)
