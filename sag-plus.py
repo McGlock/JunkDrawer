@@ -325,6 +325,8 @@ def main():
 	max_contig_len = int(sys.argv[5])
 	overlap_len = int(sys.argv[6])
 	save_path = sys.argv[7]
+	tax_map = sys.argv[8]
+	taxid_file = sys.argv[9]
 	num_components = 3 # int(sys.argv[8])
 
 	# magic numbers
@@ -347,7 +349,7 @@ def main():
 		sag_list = [sag_path]
 
 	error_df_list = []
-	subseq_map_list = []
+	taxa_tracking_list = []
 	for sag_file in sag_list:
 		sag_basename = basename(sag_file)
 		sag_id = sag_basename.split('.')[0]
@@ -572,27 +574,60 @@ def main():
 
 		# get subcontigs predicted as SAG+ with all filters
 		SAG_pred_list = []
-		TP_list = []
+		#TP_list = []
 		for index, row in all_isSAG_df.iterrows():
 			isSAG_sum = sum([1 for x in row if 'Pos' in x])
-			TP_sum = sum([1 for x in row if 'TruePos' in x])
-			if TP_sum == len(all_isSAG_df.columns):
-				TP_list.append(index)
+			#TP_sum = sum([1 for x in row if 'TruePos' in x])
+			#if TP_sum == len(all_isSAG_df.columns):
+			#	TP_list.append(index)
 			if isSAG_sum == len(all_isSAG_df.columns):
 				SAG_pred_list.append(index)
 		print('[SAG+]: Predicted %s subcontigs for SAG %s' % (str(len(set(SAG_pred_list))), 
 																sag_id)
 																)
-		print('[SAG+]: Of those, %s where True Positives' % (str(len(set(TP_list)))))
+		#print('[SAG+]: Of those, %s were True Positives' % (str(len(set(TP_list)))))
+		
+		# Map contigs to taxid
+		taxmap_df = pd.read_csv(tax_map, sep='\t', header=0)
+		taxid2name_df = pd.read_csv(taxid_file, sep='\t', header=0)
+		taxid2name_df['sp_taxid'] = [int(x) for x in taxid2name_df['@@TAXID']]
+		taxid2name_df['sp_name'] = [x.split('|')[-1] for x in taxid2name_df['TAXPATHSN']]
+
 		# Save Predicted SAG contigs to a fasta file
 		fasta_out_file = join(save_path, sag_id + '.predicted_contigs.fasta')
+		taxa_cnt_dict = {}
 		with open(fasta_out_file, 'w') as fasta_out:
 			for header, seq in zip(mg_headers, mg_subs):
+				contig_id = header.rsplit('|', 1)[0]
+				tax_id = taxmap_df.loc[taxmap_df['@@SEQUENCEID'] == contig_id][
+																		'TAXID'].values[0]
 				if header in SAG_pred_list:
-					fasta_out.write('\n'.join(['>' + header, seq]) + '\n')
+					new_header = '>' + header + '|' + str(tax_id)
+					fasta_out.write('\n'.join([new_header, seq]) + '\n')
+					if tax_id in taxa_cnt_dict.keys():
+						taxa_cnt_dict[tax_id] += 1
+					else:
+						taxa_cnt_dict[tax_id] = 1
 		print('[SAG+]: Predicted subcontigs saved to %s' % basename(fasta_out_file))
+		taxa_cnt_df = pd.DataFrame.from_dict(taxa_cnt_dict, orient='index',
+												columns=['count']
+												)
+		taxa_cnt_df['sp_name'] = [list(taxid2name_df.loc[taxid2name_df['sp_taxid'] == int(x)
+									]['sp_name'].values)[0] for x in taxa_cnt_df.index
+									]
+		percent_list = []
+		for k in taxa_cnt_dict.keys():
+			v = taxa_cnt_dict[k]
+			percent_taxa = str(round((v/len(SAG_pred_list))*100, 2))
+			percent_list.append(percent_taxa)
+			print('[SAG+]: %s makes up %s percent of predicted SAG+' % (k, percent_taxa))
+		taxa_cnt_df['percent_recruit'] = percent_list
+		taxa_cnt_df.sort_values(by=['count'], inplace=True)
+		taxa_tracking_list.append(taxa_cnt_df)
 		print('[SAG+]: Completed analysis of %s and %s' % (sag_id, mg_id))
 
+	taxa_tracking_df = pd.concat(taxa_tracking_list)
+	taxa_tracking_df.to_csv(join(save_path, 'total_recruit_stats.tsv'), sep='\t')	
 	### Used for seq tracking and error analysis
 	final_err_df = pd.concat(error_df_list)  # TODO: combine error stats into one value
 	final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
