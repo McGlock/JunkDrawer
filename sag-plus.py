@@ -325,7 +325,7 @@ def main():
 	max_contig_len = int(sys.argv[5])
 	overlap_len = int(sys.argv[6])
 	save_path = sys.argv[7]
-	num_components = int(sys.argv[8])
+	num_components = 3 # int(sys.argv[8])
 
 	# magic numbers
 	#num_components = 2
@@ -461,7 +461,7 @@ def main():
 		targets_ints = [x[0] for x in enumerate(targets, start=0)]
 
 		print('[SAG+]: Dimension reduction with UMAP')
-		fit = umap.UMAP(n_neighbors=15, min_dist=0.0,
+		fit = umap.UMAP(n_neighbors=30, min_dist=0.0,
 						n_components=num_components, metric='manhattan',
 						random_state=42
 						)
@@ -574,6 +574,9 @@ def main():
 		SAG_pred_list = []
 		for index, row in all_isSAG_df.iterrows():
 			isSAG_sum = sum([1 for x in row if 'Pos' in x])
+			TP_sum = sum([1 for x in row if 'TruePos' in x])
+			if TP_sum == len(all_isSAG_df.columns):
+				print(row)
 			if isSAG_sum == len(all_isSAG_df.columns):
 				SAG_pred_list.append(index)
 		print('[SAG+]: Predicted %s subcontigs for SAG %s' % (str(len(set(SAG_pred_list))), 
