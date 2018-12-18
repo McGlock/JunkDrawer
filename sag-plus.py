@@ -271,9 +271,9 @@ def plot_ellispe_membership(df, plot_save_path, mean, covar):
 	return df, isSAG_col
 
 
-def plot_ellispe_error(df, plot_save_path, mean, covar):
+def plot_ellispe_error(df, error_hue, plot_save_path, mean, covar):
 	# Draw ellispe that colors by error stats
-	ax = sns.scatterplot(x=df[df.columns[0]], y=df[df.columns[1]], hue=df.index)
+	ax = sns.scatterplot(x=df[df.columns[0]], y=df[df.columns[1]], hue=error_hue)
 	draw_ellipse(mean, covar, alpha=0.1)
 	plt.gca().set_aspect('equal', 'datalim')
 	plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
@@ -283,42 +283,20 @@ def plot_ellispe_error(df, plot_save_path, mean, covar):
 
 def calc_err(df):
 	# build error type df
-	idf_cnt_df = df.groupby('idf_errors')[df.columns[0]].count().reset_index()
-	idf_cnt_df.columns = ['err_type', 'idf_errors']
-	idf_TP = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'TruePos', 'idf_errors'].values[0]
-	idf_FP = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'FalsePos', 'idf_errors'].values[0]
-	idf_FN = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'FalseNeg', 'idf_errors'].values[0]
-	idf_TN = idf_cnt_df.loc[idf_cnt_df['err_type'] == 'TrueNeg', 'idf_errors'].values[0]
-	
-	idf_cnt_df['idf_precision'] = idf_TP/(idf_TP + idf_FP)
-	idf_cnt_df['idf_sensitivity'] = idf_TP/(idf_TP + idf_FN)
-	idf_cnt_df['idf_specificity'] = idf_TN/(idf_TN + idf_FP)
+	err_df_list = []
+	for col in df.columns:
+		val_cnt = df[col].value_counts()
+		cnt_df = val_cnt.rename_axis('err_type').to_frame(col).reset_index()
+		TP = cnt_df.loc[cnt_df['err_type'] == 'TruePos', col].values[0]
+		FP = cnt_df.loc[cnt_df['err_type'] == 'FalsePos', col].values[0]
+		FN = cnt_df.loc[cnt_df['err_type'] == 'FalseNeg', col].values[0]
+		TN = cnt_df.loc[cnt_df['err_type'] == 'TrueNeg', col].values[0]
 
-	thf_cnt_df = df.groupby('thf_errors')[df.columns[0]].count().reset_index()
-	thf_cnt_df.columns = ['err_type', 'thf_errors']
-	thf_TP = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'TruePos', 'thf_errors'].values[0]
-	thf_FP = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'FalsePos', 'thf_errors'].values[0]
-	thf_FN = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'FalseNeg', 'thf_errors'].values[0]
-	thf_TN = thf_cnt_df.loc[thf_cnt_df['err_type'] == 'TrueNeg', 'thf_errors'].values[0]
-	
-	thf_cnt_df['thf_precision'] = thf_TP/(thf_TP + thf_FP)
-	thf_cnt_df['thf_sensitivity'] = thf_TP/(thf_TP + thf_FN)
-	thf_cnt_df['thf_specificity'] = thf_TN/(thf_TN + thf_FP)
+		cnt_df[col + '_precision'] = TP/(TP + FP)
+		cnt_df[col + '_sensitivity'] = TP/(TP + FN)
+		cnt_df[col + '_specificity'] = TN/(TN + FP)
 
-	htf_cnt_df = df.groupby('htf_errors')[df.columns[0]].count().reset_index()
-	htf_cnt_df.columns = ['err_type', 'htf_errors']
-	htf_TP = htf_cnt_df.loc[htf_cnt_df['err_type'] == 'TruePos', 'htf_errors'].values[0]
-	htf_FP = htf_cnt_df.loc[htf_cnt_df['err_type'] == 'FalsePos', 'htf_errors'].values[0]
-	htf_FN = htf_cnt_df.loc[htf_cnt_df['err_type'] == 'FalseNeg', 'htf_errors'].values[0]
-	htf_TN = htf_cnt_df.loc[htf_cnt_df['err_type'] == 'TrueNeg', 'htf_errors'].values[0]
-	
-	htf_cnt_df['htf_precision'] = htf_TP/(htf_TP + htf_FP)
-	htf_cnt_df['htf_sensitivity'] = htf_TP/(htf_TP + htf_FN)
-	htf_cnt_df['htf_specificity'] = htf_TN/(htf_TN + htf_FP)
-
-	err_df_list = [idf_cnt_df, thf_cnt_df, htf_cnt_df]
-
-	#error_df = pd.merge(idf_cnt_df, thf_cnt_df, on='err_type')
+		err_df_list.append(cnt_df)
 	error_df = functools.reduce(lambda left,right: pd.merge(left,right,on='err_type'),
 									err_df_list
 									)
@@ -396,15 +374,6 @@ def main():
 			with open(join(save_path, sag_id + '.headers.pkl'), 'wb') as p:
 				pickle.dump(sag_raw_contig_headers, p)
 
-		'''
-		# SAG coverage info
-		sag_abund_df = pd.read_csv(sag_abund_file, header=0, sep='\t')
-		sag_tot_depth_dict = {x[0]: sag_abund_df.loc[sag_abund_df['contigName']
-								== x[0]]['totalAvgDepth'].values[0]
-								for x in sag_contigs
-								}
-		'''
-
 		# SAG subseqs kmer hashing
 		if isfile(join(save_path, sag_id + '.pkl')):
 			with open(join(save_path, sag_id + '.pkl'), 'rb') as p:
@@ -440,15 +409,6 @@ def main():
 			mg_tetra_df.set_index('contig_id', inplace=True)
 			mg_tetra_df.to_csv(join(save_path, mg_id + '.tsv'), sep='\t')
 
-		'''
-		# MetaG coverage info
-		mg_abund_df = pd.read_csv(mg_abund_file, header=0, sep='\t')
-		mg_tot_depth_dict = {x[0].rsplit('|', 1)[0]: mg_abund_df.loc[mg_abund_df['contigName']
-								== x[0].rsplit('|', 1)[0]]['totalAvgDepth'].values[0]
-								for x in mg_contigs
-								}
-		'''
-
 		# MG subseqs L-mer hash, compare to SAG hashes
 		if isfile(join(save_path, sag_id + '.kmer_recruit.pkl')): 
 			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'rb') as p:
@@ -463,13 +423,12 @@ def main():
 				mg_hashes.sort(reverse=True)
 				mg_hashes_set = set(mg_hashes)
 				if sag_hashes_set.intersection(mg_hashes_set):
-					#print('%s passed identity filter' % mg_header)
 					pass_list.append(mg_header)
-				#else:
-					#print('%s failed' % mg_header)
 			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
 				pickle.dump(pass_list, p)
 		
+		error_dict = {}
+
 		### Used for seq tracking and error analysis
 		# Look at ID filter (idf) error types
 		mg_idf_errors = []
@@ -485,11 +444,8 @@ def main():
 				mg_idf_errors.append('TrueNeg')
 		track_recruits_df = pd.DataFrame(mg_idf_errors, columns=['idf_errors'],
 											index=mg_tetra_df.index)
-		# Set MetaG contig index to genome id for error tracking
-		#mg_contig_index = [x.rsplit('|', 1)[1] for x in mg_tetra_df.index]
-		#mg_tetra_df.reset_index(inplace=True)
-		#mg_tetra_df['contig_id'] = mg_contig_index
-		#mg_tetra_df.set_index('contig_id', inplace=True)
+		
+		error_dict['idf_errors'] = mg_idf_errors
 
 		concat_tetra_df = pd.concat([sag_tetra_df, mg_tetra_df])
 		normed_tetra_df = pd.DataFrame(normalize(concat_tetra_df.values),
@@ -498,16 +454,6 @@ def main():
 										)
 		sag_tetra_df['data_type'] = ['SAG' for x in sag_tetra_df.index]
 		mg_tetra_df['data_type'] = ['MG' for x in mg_tetra_df.index]
-
-		#sorter = ['TrueNeg', 'TruePos', 'SAG', 'FalseNeg', 'FalsePos']
-		#sorterIndex = dict(zip(sorter,range(len(sorter))))
-		#concat_df['Rank'] = concat_df['idf_errors'].map(sorterIndex)
-		#concat_df.sort_values(by=['Rank'], inplace=True)
-		#sorted_subseq_ids = concat_df.index.values
-		#idf_df = concat_df.set_index('idf_errors')
-		#idf_df.drop(['Rank'], axis=1, inplace=True)
-		#idf_df = pd.DataFrame(normalize(idf_df.values), columns=idf_df.columns,
-		#						index=idf_df.index)
 		### END
 
 		features = normed_tetra_df.values
@@ -515,12 +461,7 @@ def main():
 		targets_ints = [x[0] for x in enumerate(targets, start=0)]
 
 		print('[SAG+]: Dimension reduction with UMAP')
-		#data = plot_umap(idf_df, save_path, n_neighbors=30, min_dist=0.0,
-		#							n_components=num_components, random_state=42,
-		#							metric='manhattan'
-		#							)
-		
-		fit = umap.UMAP(n_neighbors=30, min_dist=0.0,
+		fit = umap.UMAP(n_neighbors=15, min_dist=0.0,
 						n_components=num_components, metric='manhattan',
 						random_state=42
 						)
@@ -528,7 +469,7 @@ def main():
 		pc_col_names = ['pc' + str(x) for x in range(1, num_components + 1)]
 		umap_df = pd.DataFrame(data, columns=pc_col_names, index=targets)
 		# build SAG GMM for H0 test file (htf)
-		print('[SAG+]: Calculating SAG GMMs')
+		print('[SAG+]: Calculating AIC/BIC')
 		sag_umap_df = umap_df.loc[umap_df.index.isin(sag_tetra_df.index)]
 		mg_umap_df = umap_df.loc[umap_df.index.isin(mg_tetra_df.index)]
 		n_components = np.arange(1, 100, 1)
@@ -538,14 +479,15 @@ def main():
 		aics = [model.fit(sag_umap_df.values).aic(sag_umap_df.values) for model in models]
 		min_bic_comp = n_components[bics.index(min(bics))]
 		min_aic_comp = n_components[aics.index(min(aics))]
-		print(min_bic_comp, min_aic_comp)
-		gmm = GMM(n_components=min_bic_comp, covariance_type='tied',
+		print('[SAG+]: Min AIC/BIC at %s/%s, respectively' % (min_aic_comp, min_bic_comp))
+		print('[SAG+]: Using AIC as guide for GMM components')
+		print('[SAG+]: Training GMM on SAG tetras')
+		gmm = GMM(n_components=min_aic_comp, covariance_type='tied',
 					random_state=42).fit(sag_umap_df.values)
 		sag_scores = gmm.score_samples(sag_umap_df.values)
 		sag_scores_df = pd.DataFrame(data=sag_scores, index=sag_umap_df.index)
 		sag_score_min = min(sag_scores_df.values)[0]
 		sag_score_max = max(sag_scores_df.values)[0]
-
 		mg_scores = gmm.score_samples(mg_umap_df.values)
 		mg_scores_df = pd.DataFrame(data=mg_scores, index=mg_umap_df.index)
 		mg_score_min = min(mg_scores_df.values)[0]
@@ -567,10 +509,10 @@ def main():
 					(trimmed_header not in sag_raw_contig_headers)):
 				mg_htf_errors.append('TrueNeg')
 
+		error_dict['htf_errors'] = mg_htf_errors
+
 		pc_pair_error_df_list = []
 		pc_pair_subseq_map_list = []
-		isSAG_cols = []
-		# TODO: refactoring this loop
 		for pc_pair in combinations(pc_col_names, 2):
 			pc_pair = list(pc_pair)
 			subset_df = umap_df[pc_pair]
@@ -588,7 +530,9 @@ def main():
 			error_file_name = '.'.join([sag_id, '_'.join(pc_pair),
 										'UMAP_Error_Ellipse', 'png'])
 			error_save_path = join(save_path, error_file_name)
-			plot_ellispe_error(submg_umap_df, error_save_path, sag_mean, sag_corr)
+			plot_ellispe_error(submg_umap_df, mg_idf_errors, error_save_path,
+								sag_mean, sag_corr
+								)
 			### END
 
 			# Draw ellispe that colors by membership
@@ -597,22 +541,16 @@ def main():
 			memb_file_name = '.'.join([sag_id, '_'.join(pc_pair),
 										'UMAP_Ellipse_membership', 'png'])
 			memb_save_path = join(save_path, memb_file_name)
-			membership_df, isSAG_col = plot_ellispe_membership(submg_umap_df, memb_save_path,
-													sag_mean, sag_corr)
-			isSAG_cols.append(isSAG_col)
-			# add subseq mapping
-			membership_df['subseq_header'] = mg_umap_df.index
-			
+			membership_df, isSAG_col = plot_ellispe_membership(submg_umap_df,
+																memb_save_path,
+																sag_mean, sag_corr
+																)
 			### Used for seq tracking and error analysis
-			# preserve idf errors
-			membership_df['idf_errors'] = membership_df.index
 			# Look at tetramer Hz filter (thf) error types
-			print('[SAG+]: Building error type dataframe')
 			mg_thf_errors = []
 			for index, row in membership_df.iterrows():
-				header = row['subseq_header']
 				isSAG = row[isSAG_col]
-				trimmed_header = header.rsplit('_', 1)[0]
+				trimmed_header = index.rsplit('|', 1)[1].rsplit('_', 1)[0]
 				if (isSAG == 1) and (trimmed_header in sag_raw_contig_headers):
 					mg_thf_errors.append('TruePos')
 				elif (isSAG == 1) and (trimmed_header not in sag_raw_contig_headers):
@@ -621,75 +559,35 @@ def main():
 					mg_thf_errors.append('FalseNeg')
 				elif (isSAG != 1) and (trimmed_header not in sag_raw_contig_headers):
 					mg_thf_errors.append('TrueNeg')
-			membership_df['thf_errors'] = mg_thf_errors
-			membership_df['htf_errors'] = mg_htf_errors
-			error_df = calc_err(membership_df)
+			error_dict['_'.join(['thf', '_'.join(pc_pair)])] = mg_thf_errors
 
-			membership_df.drop(columns=['idf_errors', 'thf_errors', 'htf_errors'],
-								axis=1, inplace=True)
-			membership_df['dimension'] = '_'.join(pc_pair)
-			error_df['sag_id'] = sag_id
-			error_df.set_index('sag_id', inplace=True)
-			error_df['dimension'] = '_'.join(pc_pair)
-			pc_pair_error_df_list.append(error_df)
-			### END
-			pc_pair_subseq_map_list.append(membership_df)
-		pc_pair_subseq_df = functools.reduce(lambda x, y: pd.merge(  # TODO: Eating all the RAMs, find a fix
-															x, y, on=['subseq_header']),
-															pc_pair_subseq_map_list
-															)
-		pc_pair_subseq_df.set_index('subseq_header', inplace=True)
-		pc_pair_subseq_df.to_csv(join(save_path, sag_id + '_subseq_map.tsv'), sep='\t')
-
-		### Used for seq tracking and error analysis
-		pc_pair_err_df = pd.concat(pc_pair_error_df_list)
-		pc_pair_err_df.to_csv(join(save_path, sag_id + '_error_stats.tsv'), sep='\t')
+		print('[SAG+]: Building error type dataframe')
+		all_isSAG_df = pd.DataFrame(error_dict, index=mg_umap_df.index)
+		error_df = calc_err(all_isSAG_df)
+		error_df['sag_id'] = sag_id
+		error_df.set_index('sag_id', inplace=True)
+		error_df.to_csv(join(save_path, sag_id + '_error_stats.tsv'), sep='\t')
 		### END
+		error_df_list.append(error_df)
 
-		error_df_list.append(pc_pair_err_df)
-		subseq_map_list.append(pc_pair_subseq_df)
-
-		# get all predicted SAGs
-		#SAG_pred_dict = {}
+		# get subcontigs predicted as SAG+ with all filters
 		SAG_pred_list = []
-		for index, row in pc_pair_subseq_df.iterrows():
-			isSAG_val_list = [row[v] for v in isSAG_cols]
-			if sum(isSAG_val_list) == len(isSAG_cols):
+		for index, row in all_isSAG_df.iterrows():
+			isSAG_sum = sum([1 for x in row if 'Pos' in x])
+			if isSAG_sum == len(all_isSAG_df.columns):
 				SAG_pred_list.append(index)
 		print('[SAG+]: Predicted %s subcontigs for SAG %s' % (str(len(set(SAG_pred_list))), 
 																sag_id)
 																)
-
-		'''
-			seq_header = index.rsplit('_', 1)[0]
-			if seq_header in SAG_pred_dict.keys():
-				SAG_pred_dict[seq_header].append(sum(isSAG_val_list))
-			else:
-				SAG_pred_dict[seq_header] = [sum(isSAG_val_list)]
-		'''
-
 		# Save Predicted SAG contigs to a fasta file
 		fasta_out_file = join(save_path, sag_id + '.predicted_contigs.fasta')
 		with open(fasta_out_file, 'w') as fasta_out:
 			for header, seq in zip(mg_headers, mg_subs):
 				if header in SAG_pred_list:
-					fasta_out.write('\n'.join([header, seq]) + '\n')
+					fasta_out.write('\n'.join(['>' + header, seq]) + '\n')
 		print('[SAG+]: Predicted subcontigs saved to %s' % basename(fasta_out_file))
-
-		'''
-		# Get only contigs where all subcontigs are in the cluster
-		for key in SAG_pred_dict.keys():
-			sum_all = sum(SAG_pred_dict[key])
-			if sum_all/len(SAG_pred_dict[key]) == len(isSAG_cols):
-				1+1#print(key)
-			elif sum_all/len(SAG_pred_dict[key]) != 0:
-				print(sum_all/len(SAG_pred_dict[key]))
-				print(key)
-				print(SAG_pred_dict[key])
-		'''
 		print('[SAG+]: Completed analysis of %s and %s' % (sag_id, mg_id))
-	final_subseq_df = pd.concat(subseq_map_list)
-	final_subseq_df.to_csv(join(save_path, 'total_subseq_map.tsv'), sep='\t')
+
 	### Used for seq tracking and error analysis
 	final_err_df = pd.concat(error_df_list)  # TODO: combine error stats into one value
 	final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
