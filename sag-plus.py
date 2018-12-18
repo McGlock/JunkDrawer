@@ -577,7 +577,7 @@ def main():
 			isSAG_sum = sum([1 for x in row if 'Pos' in x])
 			TP_sum = sum([1 for x in row if 'TruePos' in x])
 			if TP_sum == len(all_isSAG_df.columns):
-				TP_list.apend(index)
+				TP_list.append(index)
 			if isSAG_sum == len(all_isSAG_df.columns):
 				SAG_pred_list.append(index)
 		print('[SAG+]: Predicted %s subcontigs for SAG %s' % (str(len(set(SAG_pred_list))), 
