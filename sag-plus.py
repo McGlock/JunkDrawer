@@ -338,11 +338,12 @@ def main():
 	# TODO: Fit UMAP output to model and test with AIC, which model fits best?
 	# TODO: combine error into one value, remove subseq map file creation
 	# TODO: add abundance(coverage) data to analysis
+	# TODO: output number of tetras/kmers skipped b/c of ambiguous nucs
 
 	if isdir(sag_path):
 		print('[SAG+]: Directory specified, looking for .fasta files within')
 		sag_list = [join(sag_path, f) for f in
-								listdir(sag_path) if '.fasta' in f
+								listdir(sag_path) if f.split('.')[-1] == 'fasta'
 								]
 	elif isfile(sag_path):
 		print('[SAG+]: File specified, processing %s' % basename(sag_path))
@@ -622,7 +623,7 @@ def main():
 			percent_list.append(percent_taxa)
 			print('[SAG+]: %s makes up %s percent of predicted SAG+' % (k, percent_taxa))
 		taxa_cnt_df['percent_recruit'] = percent_list
-		taxa_cnt_df.sort_values(by=['count'], inplace=True)
+		taxa_cnt_df.sort_values(by=['count'], inplace=True, ascending=False)
 		taxa_tracking_list.append(taxa_cnt_df)
 		print('[SAG+]: Completed analysis of %s and %s' % (sag_id, mg_id))
 
