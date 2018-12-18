@@ -192,7 +192,6 @@ def draw_ellipse(position, covariance, ax=None, **kwargs):
 		nsig_height = nsig * height
 		ax.add_patch(Ellipse(position, nsig_width, nsig_height,
 							 angle, **kwargs))
-	
 	return position, nsig_width, nsig_height, angle
 
 	
@@ -212,7 +211,7 @@ def plot_gmm(sg_id, sv_pth, gmm, X, targets, label=True, ax=None):
 	# Predict labels based on GMM
 	labels = gmm.predict(X)
 	# Get associated probabilities for predicted labels
-	probs = gmm.predict_proba(data)
+	probs = gmm.predict_proba(X)
 	probs_df = pd.DataFrame(data=probs.round(3), index=targets)
 	probs_df.reset_index(inplace=True)
 	# Create scatter with predicted membership labels
@@ -306,7 +305,24 @@ def calc_err(df):
 	thf_cnt_df['thf_sensitivity'] = thf_TP/(thf_TP + thf_FN)
 	thf_cnt_df['thf_specificity'] = thf_TN/(thf_TN + thf_FP)
 
-	error_df = pd.merge(idf_cnt_df, thf_cnt_df, on='err_type')
+	htf_cnt_df = df.groupby('htf_errors')[df.columns[0]].count().reset_index()
+	htf_cnt_df.columns = ['err_type', 'htf_errors']
+	htf_TP = htf_cnt_df.loc[htf_cnt_df['err_type'] == 'TruePos', 'htf_errors'].values[0]
+	htf_FP = htf_cnt_df.loc[htf_cnt_df['err_type'] == 'FalsePos', 'htf_errors'].values[0]
+	htf_FN = htf_cnt_df.loc[htf_cnt_df['err_type'] == 'FalseNeg', 'htf_errors'].values[0]
+	htf_TN = htf_cnt_df.loc[htf_cnt_df['err_type'] == 'TrueNeg', 'htf_errors'].values[0]
+	
+	htf_cnt_df['htf_precision'] = htf_TP/(htf_TP + htf_FP)
+	htf_cnt_df['htf_sensitivity'] = htf_TP/(htf_TP + htf_FN)
+	htf_cnt_df['htf_specificity'] = htf_TN/(htf_TN + htf_FP)
+
+	err_df_list = [idf_cnt_df, thf_cnt_df, htf_cnt_df]
+
+	#error_df = pd.merge(idf_cnt_df, thf_cnt_df, on='err_type')
+	error_df = functools.reduce(lambda left,right: pd.merge(left,right,on='err_type'),
+									err_df_list
+									)
+
 	return error_df
 
 
@@ -360,7 +376,7 @@ def main():
 		
 		# SAG Tetras
 		if isfile(join(save_path, sag_id + '.tsv')):
-			sag_contigs, sag_raw_contig_headers = mock_SAG(sag_file)
+			#sag_contigs, sag_raw_contig_headers = mock_SAG(sag_file)
 			sag_tetra_df = pd.read_csv(join(save_path, sag_id + '.tsv'),
 										sep='\t', index_col=0, header=0)
 
@@ -456,100 +472,115 @@ def main():
 		
 		### Used for seq tracking and error analysis
 		# Look at ID filter (idf) error types
-		sag_tetra_df['idf_errors'] = ['SAG' for x in sag_tetra_df.index]
 		mg_idf_errors = []
 		for index in mg_tetra_df.index:
 			trimmed_index = index.rsplit('|', 1)[1].rsplit('_', 1)[0]
-			print(trimmed_index)
-			print(sag_raw_contig_headers[0:5])
 			if (index in pass_list) and (trimmed_index in sag_raw_contig_headers):
 				mg_idf_errors.append('TruePos')
-				print(trimmed_index)
 			elif (index in pass_list) and (trimmed_index not in sag_raw_contig_headers):
 					mg_idf_errors.append('FalsePos')
 			elif (index not in pass_list) and (trimmed_index in sag_raw_contig_headers):
 				mg_idf_errors.append('FalseNeg')
 			elif (index not in pass_list) and (trimmed_index not in sag_raw_contig_headers):
 				mg_idf_errors.append('TrueNeg')
-		mg_tetra_df['idf_errors'] = mg_idf_errors
+		track_recruits_df = pd.DataFrame(mg_idf_errors, columns=['idf_errors'],
+											index=mg_tetra_df.index)
 		# Set MetaG contig index to genome id for error tracking
-		mg_contig_index = [x.rsplit('|', 1)[1] for x in mg_tetra_df.index]
-		mg_tetra_df.reset_index(inplace=True)
-		mg_tetra_df['contig_id'] = mg_contig_index
-		mg_tetra_df.set_index('contig_id', inplace=True)
+		#mg_contig_index = [x.rsplit('|', 1)[1] for x in mg_tetra_df.index]
+		#mg_tetra_df.reset_index(inplace=True)
+		#mg_tetra_df['contig_id'] = mg_contig_index
+		#mg_tetra_df.set_index('contig_id', inplace=True)
 
-		'''
-		# Add coverage info for SAG/MetaG to dataframe
-		sag_tetra_df['totalAvgDepth'] = [sag_tot_depth_dict[x.rsplit('_', 1)[0]]
-											for x in sag_tetra_df.index
-											]  # TODO: fix to handle N columns of data
+		concat_tetra_df = pd.concat([sag_tetra_df, mg_tetra_df])
+		normed_tetra_df = pd.DataFrame(normalize(concat_tetra_df.values),
+										columns=concat_tetra_df.columns,
+										index=concat_tetra_df.index
+										)
+		sag_tetra_df['data_type'] = ['SAG' for x in sag_tetra_df.index]
+		mg_tetra_df['data_type'] = ['MG' for x in mg_tetra_df.index]
 
-		sag_ave_depth = sag_tetra_df[['totalAvgDepth']].values.astype(float)
-		sag_normed_depth = sag_ave_depth #normalize(sag_ave_depth)
-		sag_tetra_df['totalAvgDepth'] = sag_normed_depth
-		print(sag_tetra_df.head())
-		mg_tetra_df['totalAvgDepth'] = [mg_tot_depth_dict[x.rsplit('_', 1)[0]]
-											for x in mg_tetra_df.index
-											]  # TODO: fix to handle N columns of data
-
-		mg_ave_depth = mg_tetra_df[['totalAvgDepth']].values.astype(float)
-		mg_normed_depth = mg_ave_depth #normalize(mg_ave_depth)
-		mg_tetra_df['totalAvgDepth'] = mg_normed_depth
-		print(mg_tetra_df.head())
-		'''
-
-		concat_df = pd.concat([sag_tetra_df, mg_tetra_df])
-
-		#idf_errors = concat_df['idf_errors']
-		sorter = ['TrueNeg', 'TruePos', 'SAG', 'FalseNeg', 'FalsePos']
-		sorterIndex = dict(zip(sorter,range(len(sorter))))
-		concat_df['Rank'] = concat_df['idf_errors'].map(sorterIndex)
-		concat_df.sort_values(by=['Rank'], inplace=True)
-		sorted_subseq_ids = concat_df.index.values
-		idf_df = concat_df.set_index('idf_errors')
-		idf_df.drop(['Rank'], axis=1, inplace=True)
+		#sorter = ['TrueNeg', 'TruePos', 'SAG', 'FalseNeg', 'FalsePos']
+		#sorterIndex = dict(zip(sorter,range(len(sorter))))
+		#concat_df['Rank'] = concat_df['idf_errors'].map(sorterIndex)
+		#concat_df.sort_values(by=['Rank'], inplace=True)
+		#sorted_subseq_ids = concat_df.index.values
+		#idf_df = concat_df.set_index('idf_errors')
+		#idf_df.drop(['Rank'], axis=1, inplace=True)
+		#idf_df = pd.DataFrame(normalize(idf_df.values), columns=idf_df.columns,
+		#						index=idf_df.index)
 		### END
 
-		'''
-		scaler = StandardScaler()
-		scaled_df = scaler.fit_transform(idf_df)
-		scaled_df = pd.DataFrame(scaled_df, columns=idf_df.columns)
-
-		#build histograms
-		for index, col in enumerate(scaled_df.columns):
-			hist = scaled_df[col]
-			print(hist[0:10])
-			#fig = hist.get_figure()
-			h_save_file = join(save_path, 'histograms/' + col + '.png')
-			fig = sns.distplot(hist, bins=100)
-			plt.savefig(h_save_file, bbox_inches="tight")
-			plt.clf()
-			print(col)
-		'''
-
-		features = idf_df.values
-		targets = idf_df.index.values
+		features = normed_tetra_df.values
+		targets = normed_tetra_df.index.values
 		targets_ints = [x[0] for x in enumerate(targets, start=0)]
 
 		print('[SAG+]: Dimension reduction with UMAP')
-		data = plot_umap(idf_df, save_path, n_neighbors=30, min_dist=0.0,
-									n_components=num_components, random_state=42
-									)
+		#data = plot_umap(idf_df, save_path, n_neighbors=30, min_dist=0.0,
+		#							n_components=num_components, random_state=42,
+		#							metric='manhattan'
+		#							)
+		
+		fit = umap.UMAP(n_neighbors=30, min_dist=0.0,
+						n_components=num_components, metric='manhattan',
+						random_state=42
+						)
+		data = fit.fit_transform(features)
 		pc_col_names = ['pc' + str(x) for x in range(1, num_components + 1)]
 		umap_df = pd.DataFrame(data, columns=pc_col_names, index=targets)
+		# build SAG GMM for H0 test file (htf)
+		print('[SAG+]: Calculating SAG GMMs')
+		sag_umap_df = umap_df.loc[umap_df.index.isin(sag_tetra_df.index)]
+		mg_umap_df = umap_df.loc[umap_df.index.isin(mg_tetra_df.index)]
+		n_components = np.arange(1, 100, 1)
+		models = [GMM(n, covariance_type='tied', random_state=42)
+			  for n in n_components]
+		bics = [model.fit(sag_umap_df.values).bic(sag_umap_df.values) for model in models]
+		aics = [model.fit(sag_umap_df.values).aic(sag_umap_df.values) for model in models]
+		min_bic_comp = n_components[bics.index(min(bics))]
+		min_aic_comp = n_components[aics.index(min(aics))]
+		print(min_bic_comp, min_aic_comp)
+		gmm = GMM(n_components=min_bic_comp, covariance_type='tied',
+					random_state=42).fit(sag_umap_df.values)
+		sag_scores = gmm.score_samples(sag_umap_df.values)
+		sag_scores_df = pd.DataFrame(data=sag_scores, index=sag_umap_df.index)
+		sag_score_min = min(sag_scores_df.values)[0]
+		sag_score_max = max(sag_scores_df.values)[0]
+
+		mg_scores = gmm.score_samples(mg_umap_df.values)
+		mg_scores_df = pd.DataFrame(data=mg_scores, index=mg_umap_df.index)
+		mg_score_min = min(mg_scores_df.values)[0]
+		mg_score_max = max(mg_scores_df.values)[0]
+		mg_htf_errors = []
+		for index, row in mg_scores_df.iterrows():
+			score = row[0]
+			trimmed_header = index.rsplit('|', 1)[1].rsplit('_', 1)[0]
+			if ((sag_score_min <= score <= sag_score_max) and
+					(trimmed_header in sag_raw_contig_headers)):
+				mg_htf_errors.append('TruePos')
+			elif ((sag_score_min <= score <= sag_score_max) and
+					(trimmed_header not in sag_raw_contig_headers)):
+				mg_htf_errors.append('FalsePos')
+			elif (((sag_score_min > score) or (score > sag_score_max)) and
+					(trimmed_header in sag_raw_contig_headers)):
+				mg_htf_errors.append('FalseNeg')
+			elif (((sag_score_min > score) or (score > sag_score_max)) and
+					(trimmed_header not in sag_raw_contig_headers)):
+				mg_htf_errors.append('TrueNeg')
 
 		pc_pair_error_df_list = []
 		pc_pair_subseq_map_list = []
 		isSAG_cols = []
+		# TODO: refactoring this loop
 		for pc_pair in combinations(pc_col_names, 2):
 			pc_pair = list(pc_pair)
 			subset_df = umap_df[pc_pair]
+			subsag_umap_df = sag_umap_df[pc_pair]
+			submg_umap_df = mg_umap_df[pc_pair]
 
-			sag_umap_df = subset_df.loc[subset_df.index == 'SAG']
-			sag_std = sag_umap_df.std().values
-			sag_mean = sag_umap_df.mean().values
-			#sag_covar = sag_umap_df.cov().values
-			sag_corr = sag_umap_df.corr().values
+			sag_std = subsag_umap_df.std().values
+			sag_mean = subsag_umap_df.mean().values
+			#sag_covar = subsag_umap_df.cov().values
+			sag_corr = subsag_umap_df.corr().values
 			### Used for seq tracking and error analysis
 			# Draw ellispe that colors by L-mer error stats
 			print('[SAG+]: Plotting clusting with kmer error stats')
@@ -557,7 +588,7 @@ def main():
 			error_file_name = '.'.join([sag_id, '_'.join(pc_pair),
 										'UMAP_Error_Ellipse', 'png'])
 			error_save_path = join(save_path, error_file_name)
-			plot_ellispe_error(subset_df, error_save_path, sag_mean, sag_corr)
+			plot_ellispe_error(submg_umap_df, error_save_path, sag_mean, sag_corr)
 			### END
 
 			# Draw ellispe that colors by membership
@@ -566,27 +597,22 @@ def main():
 			memb_file_name = '.'.join([sag_id, '_'.join(pc_pair),
 										'UMAP_Ellipse_membership', 'png'])
 			memb_save_path = join(save_path, memb_file_name)
-			membership_df, isSAG_col = plot_ellispe_membership(subset_df, memb_save_path,
+			membership_df, isSAG_col = plot_ellispe_membership(submg_umap_df, memb_save_path,
 													sag_mean, sag_corr)
 			isSAG_cols.append(isSAG_col)
 			# add subseq mapping
-			membership_df['subseq_header'] = sorted_subseq_ids
+			membership_df['subseq_header'] = mg_umap_df.index
 			
 			### Used for seq tracking and error analysis
 			# preserve idf errors
 			membership_df['idf_errors'] = membership_df.index
 			# Look at tetramer Hz filter (thf) error types
 			print('[SAG+]: Building error type dataframe')
-			print(membership_df.head())
 			mg_thf_errors = []
 			for index, row in membership_df.iterrows():
 				header = row['subseq_header']
 				isSAG = row[isSAG_col]
 				trimmed_header = header.rsplit('_', 1)[0]
-				if trimmed_header in sag_raw_contig_headers:
-					print(header)
-					print(trimmed_header)
-					#print(row)
 				if (isSAG == 1) and (trimmed_header in sag_raw_contig_headers):
 					mg_thf_errors.append('TruePos')
 				elif (isSAG == 1) and (trimmed_header not in sag_raw_contig_headers):
@@ -596,9 +622,10 @@ def main():
 				elif (isSAG != 1) and (trimmed_header not in sag_raw_contig_headers):
 					mg_thf_errors.append('TrueNeg')
 			membership_df['thf_errors'] = mg_thf_errors
-			print(membership_df.head())
+			membership_df['htf_errors'] = mg_htf_errors
 			error_df = calc_err(membership_df)
-			membership_df.drop(columns=['idf_errors', 'thf_errors'],
+
+			membership_df.drop(columns=['idf_errors', 'thf_errors', 'htf_errors'],
 								axis=1, inplace=True)
 			membership_df['dimension'] = '_'.join(pc_pair)
 			error_df['sag_id'] = sag_id
@@ -680,22 +707,7 @@ if __name__ == "__main__":
 ################################################################
 
 
-# Messing with GMMs (no idea why)
-'''
-n_components = np.arange(5, 200, 5)
-models = [GMM(n, covariance_type='full', random_state=42)
-	  for n in n_components]
-bics = [model.fit(data).bic(data) for model in models]
-min_bic_comp = n_components[bics.index(min(bics))]
-print(min_bic_comp)
-plt.plot(n_components, bics)
-plot_save_path = join(save_path, sag_id + '.' + 'GMM_BIC.png')
-plt.savefig(plot_save_path, bbox_inches="tight")
-plt.clf()
-gmm = GMM(n_components=min_bic_comp, covariance_type='full',
-			random_state=42).fit(sag_umap_df.values)
-plot_gmm(sag_id, save_path, gmm, data, targets)
-'''
+
 # Old code
 
 '''
