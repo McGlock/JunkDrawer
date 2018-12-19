@@ -390,7 +390,7 @@ def main():
 				pickle.dump(sag_raw_contig_headers, p)
 
 		# Save Mock SAG for error analysis
-		sag_mock_out = join(save_path, sag_id + 'mSAG.fasta')
+		sag_mock_out = join(save_path, sag_id + '.mSAG.fasta')
 		with open(sag_mock_out, 'w') as s_out:
 			for header, seq in sag_contigs:
 				new_header = '>' + header
