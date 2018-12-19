@@ -431,7 +431,7 @@ def main():
 			mg_tetra_df.set_index('contig_id', inplace=True)
 			mg_tetra_df.to_csv(join(save_path, mg_id + '.tsv'), sep='\t')
 
-		# MG subseqs L-mer hash, compare to SAG hashes
+		# MG subseqs kmer hash, compare to SAG hashes
 		if isfile(join(save_path, sag_id + '.kmer_recruit.pkl')): 
 			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'rb') as p:
 				pass_list = pickle.load(p)
@@ -455,11 +455,12 @@ def main():
 		sag_taxmap_df['sp_taxid'] = [int(x) for x in sag_taxmap_df['@@TAXID']]
 		sag_taxmap_df['sp_name'] = [x.split('|')[-1] for x in sag_taxmap_df['TAXPATHSN']]
 		contig2taxid = {x[0]: x[1] for x in 
-							list(contig_taxmap_df[['@@SEQUENCEID', 'TAXID']])
+							zip(contig_taxmap_df['@@SEQUENCEID'], contig_taxmap_df['TAXID'])
 							}
 		sag_key = [s for s in sag_taxmap_df['_CAMI_genomeID']
-					if sag_id in s][0]  # hack to get partial sag id from taxmap file
-		sag_taxid = sag_taxmap_df.loc[sag_taxmap_df['_CAMI_genomeID'] == sag_key ,'sp_taxid']
+					if s in sag_id][0]  # hack to get partial sag id from taxmap file
+		sag_taxid = sag_taxmap_df.loc[sag_taxmap_df['_CAMI_genomeID'] == sag_key
+										]['sp_taxid'].values[0]
 
 		### Used for seq tracking and error analysis
 		# Look at ID filter (idf) error types
@@ -516,8 +517,21 @@ def main():
 		n_components = np.arange(1, 100, 1)
 		models = [GMM(n, covariance_type='tied', random_state=42)
 			  for n in n_components]
-		bics = [model.fit(sag_umap_df.values).bic(sag_umap_df.values) for model in models]
-		aics = [model.fit(sag_umap_df.values).aic(sag_umap_df.values) for model in models]
+		bics = []
+		aics = []
+		for i, model in enumerate(models):  # TODO: need a better way to pic GMM comps
+			n_comp = n_components[i]
+			try:
+				bic = model.fit(sag_umap_df.values).bic(sag_umap_df.values)
+				bics.append(bic)
+			except:
+				print('[WARNING]: BIC failed with %s components' % n_comp)
+			try:
+				aic = model.fit(sag_umap_df.values).aic(sag_umap_df.values)
+				aics.append(aic)
+			except:
+				print('[WARNING]: AIC failed with %s components' % n_comp)
+
 		min_bic_comp = n_components[bics.index(min(bics))]
 		min_aic_comp = n_components[aics.index(min(aics))]
 		print('[SAG+]: Min AIC/BIC at %s/%s, respectively' % (min_aic_comp, min_bic_comp))
@@ -644,8 +658,7 @@ def main():
 		with open(fasta_out_file, 'w') as fasta_out:
 			for header, seq in zip(mg_headers, mg_subs):
 				contig_id = header.rsplit('|', 1)[0]
-				tax_id = contig_taxmap_df.loc[contig_taxmap_df['@@SEQUENCEID'] == contig_id][
-																		'TAXID'].values[0]
+				tax_id = contig2taxid[contig_id]
 				if header in SAG_pred_list:
 					new_header = '>' + header + '|' + str(tax_id)
 					fasta_out.write('\n'.join([new_header, seq]) + '\n')
