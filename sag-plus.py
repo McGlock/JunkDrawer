@@ -536,18 +536,22 @@ def main():
 		mg_htf_errors = []
 		for index, row in mg_scores_df.iterrows():
 			score = row[0]
-			trimmed_header = index.rsplit('|', 1)[1].rsplit('_', 1)[0]
+			contig_header = index.rsplit('|', 1)[0]
 			if ((sag_score_min <= score <= sag_score_max) and
-					(trimmed_header in sag_raw_contig_headers)):
+					(contig2taxid[contig_header] == sag_taxid)
+					):
 				mg_htf_errors.append('TruePos')
 			elif ((sag_score_min <= score <= sag_score_max) and
-					(trimmed_header not in sag_raw_contig_headers)):
+					(contig2taxid[contig_header] != sag_taxid)
+					):
 				mg_htf_errors.append('FalsePos')
 			elif (((sag_score_min > score) or (score > sag_score_max)) and
-					(trimmed_header in sag_raw_contig_headers)):
+					(contig2taxid[contig_header] == sag_taxid)
+					):
 				mg_htf_errors.append('FalseNeg')
 			elif (((sag_score_min > score) or (score > sag_score_max)) and
-					(trimmed_header not in sag_raw_contig_headers)):
+					(contig2taxid[contig_header] != sag_taxid)
+					):
 				mg_htf_errors.append('TrueNeg')
 
 		error_dict['htf_errors'] = mg_htf_errors
@@ -591,14 +595,22 @@ def main():
 			mg_thf_errors = []
 			for index, row in membership_df.iterrows():
 				isSAG = row[isSAG_col]
-				trimmed_header = index.rsplit('|', 1)[1].rsplit('_', 1)[0]
-				if (isSAG == 1) and (trimmed_header in sag_raw_contig_headers):
+				contig_header = index.rsplit('|', 1)[0]
+				if ((isSAG == 1) and
+					(contig2taxid[contig_header] == sag_taxid)
+					):
 					mg_thf_errors.append('TruePos')
-				elif (isSAG == 1) and (trimmed_header not in sag_raw_contig_headers):
+				elif ((isSAG == 1) and
+					(contig2taxid[contig_header] != sag_taxid)
+					):
 						mg_thf_errors.append('FalsePos')
-				elif (isSAG != 1) and (trimmed_header in sag_raw_contig_headers):
+				elif ((isSAG != 1) and
+					(contig2taxid[contig_header] == sag_taxid)
+					):
 					mg_thf_errors.append('FalseNeg')
-				elif (isSAG != 1) and (trimmed_header not in sag_raw_contig_headers):
+				elif ((isSAG != 1) and
+					(contig2taxid[contig_header] != sag_taxid)
+					):
 					mg_thf_errors.append('TrueNeg')
 			error_dict['_'.join(['thf', '_'.join(pc_pair)])] = mg_thf_errors
 
