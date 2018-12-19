@@ -570,8 +570,7 @@ def main():
 
 		error_dict['htf_errors'] = mg_htf_errors
 
-		pc_pair_error_df_list = []
-		pc_pair_subseq_map_list = []
+		isSAG_pc_dict = {}
 		for pc_pair in combinations(pc_col_names, 2):
 			pc_pair = list(pc_pair)
 			subset_df = umap_df[pc_pair]
@@ -606,28 +605,39 @@ def main():
 																)
 			### Used for seq tracking and error analysis
 			# Look at tetramer Hz filter (thf) error types
-			mg_thf_errors = []
+			isSAG_list = []
 			for index, row in membership_df.iterrows():
 				isSAG = row[isSAG_col]
-				contig_header = index.rsplit('|', 1)[0]
-				if ((isSAG == 1) and
-					(contig2taxid[contig_header] == sag_taxid)
-					):
-					mg_thf_errors.append('TruePos')
-				elif ((isSAG == 1) and
-					(contig2taxid[contig_header] != sag_taxid)
-					):
-						mg_thf_errors.append('FalsePos')
-				elif ((isSAG != 1) and
-					(contig2taxid[contig_header] == sag_taxid)
-					):
-					mg_thf_errors.append('FalseNeg')
-				elif ((isSAG != 1) and
-					(contig2taxid[contig_header] != sag_taxid)
-					):
-					mg_thf_errors.append('TrueNeg')
-			error_dict['_'.join(['thf', '_'.join(pc_pair)])] = mg_thf_errors
+				isSAG_list.append(isSAG)
+			isSAG_pc_dict['_'.join(pc_pair)] = isSAG_list
 
+		### Used for seq tracking and error analysis
+		# Look at tetramer Hz filter (thf) error types
+		isSAG_pc_df = pd.DataFrame(isSAG_pc_dict, index=mg_umap_df.index)
+		isSAG_pc_df['col_sum'] = isSAG_pc_df.sum(axis=1)
+		isSAG_pc_df['isSAG'] = [1 if x == len(isSAG_pc_dict.keys())
+								else 0 for x in isSAG_pc_df['col_sum']]
+		mg_thf_errors = []
+		for index, row in isSAG_pc_df.iterrows():
+			isSAG = row['isSAG']
+			contig_header = index.rsplit('|', 1)[0]
+			if ((isSAG == 1) and
+				(contig2taxid[contig_header] == sag_taxid)
+				):
+				mg_thf_errors.append('TruePos')
+			elif ((isSAG == 1) and
+				(contig2taxid[contig_header] != sag_taxid)
+				):
+					mg_thf_errors.append('FalsePos')
+			elif ((isSAG != 1) and
+				(contig2taxid[contig_header] == sag_taxid)
+				):
+				mg_thf_errors.append('FalseNeg')
+			elif ((isSAG != 1) and
+				(contig2taxid[contig_header] != sag_taxid)
+				):
+				mg_thf_errors.append('TrueNeg')
+		error_dict['thf_errors'] = mg_thf_errors
 		print('[SAG+]: Building error type dataframe')
 		all_isSAG_df = pd.DataFrame(error_dict, index=mg_umap_df.index)
 		error_df = calc_err(all_isSAG_df)
