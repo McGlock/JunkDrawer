@@ -287,10 +287,23 @@ def calc_err(df):
 	for col in df.columns:
 		val_cnt = df[col].value_counts()
 		cnt_df = val_cnt.rename_axis('err_type').to_frame(col).reset_index()
-		TP = cnt_df.loc[cnt_df['err_type'] == 'TruePos', col].values[0]
-		FP = cnt_df.loc[cnt_df['err_type'] == 'FalsePos', col].values[0]
-		FN = cnt_df.loc[cnt_df['err_type'] == 'FalseNeg', col].values[0]
-		TN = cnt_df.loc[cnt_df['err_type'] == 'TrueNeg', col].values[0]
+		
+		if 'TruePos' in cnt_df['err_type']:
+			TP = cnt_df.loc[cnt_df['err_type'] == 'TruePos', col].values[0]
+		else:
+			TP = 0
+		if 'FalsePos' in cnt_df['err_type']:
+			FP = cnt_df.loc[cnt_df['err_type'] == 'FalsePos', col].values[0]
+		else:
+			FP = 0
+		if 'FalseNeg' in cnt_df['err_type']:
+			FN = cnt_df.loc[cnt_df['err_type'] == 'FalseNeg', col].values[0]
+		else:
+			FN = 0
+		if 'TrueNeg' in cnt_df['err_type']:
+			TN = cnt_df.loc[cnt_df['err_type'] == 'TrueNeg', col].values[0]
+		else:
+			TN = 0
 
 		cnt_df[col + '_precision'] = TP/(TP + FP)
 		cnt_df[col + '_sensitivity'] = TP/(TP + FN)
