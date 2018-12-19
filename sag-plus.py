@@ -287,20 +287,20 @@ def calc_err(df):
 	for col in df.columns:
 		val_cnt = df[col].value_counts()
 		cnt_df = val_cnt.rename_axis('err_type').to_frame(col).reset_index()
-		
-		if 'TruePos' in cnt_df['err_type']:
+
+		if 'TruePos' in list(cnt_df['err_type']):
 			TP = cnt_df.loc[cnt_df['err_type'] == 'TruePos', col].values[0]
 		else:
 			TP = 0
-		if 'FalsePos' in cnt_df['err_type']:
+		if 'FalsePos' in list(cnt_df['err_type']):
 			FP = cnt_df.loc[cnt_df['err_type'] == 'FalsePos', col].values[0]
 		else:
 			FP = 0
-		if 'FalseNeg' in cnt_df['err_type']:
+		if 'FalseNeg' in list(cnt_df['err_type']):
 			FN = cnt_df.loc[cnt_df['err_type'] == 'FalseNeg', col].values[0]
 		else:
 			FN = 0
-		if 'TrueNeg' in cnt_df['err_type']:
+		if 'TrueNeg' in list(cnt_df['err_type']):
 			TN = cnt_df.loc[cnt_df['err_type'] == 'TrueNeg', col].values[0]
 		else:
 			TN = 0
