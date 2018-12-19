@@ -484,8 +484,6 @@ def main():
 					(contig2taxid[contig_header] != sag_taxid)
 					):
 				mg_idf_errors.append('TrueNeg')
-		#track_recruits_df = pd.DataFrame(mg_idf_errors, columns=['idf_errors'],
-		#									index=mg_tetra_df.index)
 		
 		error_dict['idf_errors'] = mg_idf_errors
 
@@ -498,6 +496,7 @@ def main():
 		mg_tetra_df['data_type'] = ['MG' for x in mg_tetra_df.index]
 		### END
 
+		# UMAP for Dimension reduction
 		features = normed_tetra_df.values
 		targets = normed_tetra_df.index.values
 		targets_ints = [x[0] for x in enumerate(targets, start=0)]
@@ -510,7 +509,8 @@ def main():
 		data = fit.fit_transform(features)
 		pc_col_names = ['pc' + str(x) for x in range(1, num_components + 1)]
 		umap_df = pd.DataFrame(data, columns=pc_col_names, index=targets)
-		# build SAG GMM for H0 test file (htf)
+		
+		# build SAG GMM for H0 test filter (htf)
 		print('[SAG+]: Calculating AIC/BIC')
 		sag_umap_df = umap_df.loc[umap_df.index.isin(sag_tetra_df.index)]
 		mg_umap_df = umap_df.loc[umap_df.index.isin(mg_tetra_df.index)]
@@ -569,6 +569,12 @@ def main():
 				mg_htf_errors.append('TrueNeg')
 
 		error_dict['htf_errors'] = mg_htf_errors
+
+		# Build GMM for coverage info
+		sag_abund_file
+		
+		mg_abund_file
+
 
 		isSAG_pc_dict = {}
 		for pc_pair in combinations(pc_col_names, 2):
