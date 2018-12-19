@@ -370,7 +370,7 @@ def main():
 		
 		# SAG Tetras
 		if isfile(join(save_path, sag_id + '.tsv')):
-			#sag_contigs, sag_raw_contig_headers = mock_SAG(sag_file)
+			sag_contigs, sag_raw_contig_headers = mock_SAG(sag_file)
 			sag_tetra_df = pd.read_csv(join(save_path, sag_id + '.tsv'),
 										sep='\t', index_col=0, header=0)
 
@@ -381,7 +381,6 @@ def main():
 			print('[SAG+]: Calculating tetramer frequencies for %s' % sag_id)
 			### Used for Mock SAGs (need to change when done testing)
 			sag_contigs, sag_raw_contig_headers = mock_SAG(sag_file)
-			#sag_contigs = get_seqs(sag_file)
 			sag_headers, sag_subs = get_subseqs(sag_contigs, max_contig_len, overlap_len)
 			sag_tetra_df = pd.DataFrame.from_dict(tetra_cnt(sag_subs))
 			sag_tetra_df['contig_id'] = sag_headers
@@ -389,6 +388,13 @@ def main():
 			sag_tetra_df.to_csv(join(save_path, sag_id + '.tsv'), sep='\t')
 			with open(join(save_path, sag_id + '.headers.pkl'), 'wb') as p:
 				pickle.dump(sag_raw_contig_headers, p)
+
+		# Save Mock SAG for error analysis
+		sag_mock_out = join(save_path, sag_id + 'mSAG.fasta')
+		with open(sag_mock_out, 'w') as s_out:
+			for header, seq in sag_contigs:
+				new_header = '>' + header
+				s_out.write('\n'.join([new_header, seq]) + '\n')
 
 		# SAG subseqs kmer hashing
 		if isfile(join(save_path, sag_id + '.pkl')):
