@@ -338,8 +338,8 @@ def main():
 	max_contig_len = int(sys.argv[5])
 	overlap_len = int(sys.argv[6])
 	save_path = sys.argv[7]
-	tax_map = sys.argv[8]
-	taxid_file = sys.argv[9]
+	contig_tax_map = sys.argv[8]
+	sag_tax_map = sys.argv[9]
 	num_components = 3 # int(sys.argv[8])
 
 	# magic numbers
@@ -449,23 +449,42 @@ def main():
 			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
 				pickle.dump(pass_list, p)
 		
-		error_dict = {}
+		# Map genome id and contig id to taxid for error analysis
+		contig_taxmap_df = pd.read_csv(contig_tax_map, sep='\t', header=0)
+		sag_taxmap_df = pd.read_csv(sag_tax_map, sep='\t', header=0)
+		sag_taxmap_df['sp_taxid'] = [int(x) for x in sag_taxmap_df['@@TAXID']]
+		sag_taxmap_df['sp_name'] = [x.split('|')[-1] for x in sag_taxmap_df['TAXPATHSN']]
+		contig2taxid = {x[0]: x[1] for x in 
+							list(contig_taxmap_df[['@@SEQUENCEID', 'TAXID']])
+							}
+		sag_key = [s for s in sag_taxmap_df['_CAMI_genomeID']
+					if sag_id in s][0]  # hack to get partial sag id from taxmap file
+		sag_taxid = sag_taxmap_df.loc[sag_taxmap_df['_CAMI_genomeID'] == sag_key ,'sp_taxid']
 
 		### Used for seq tracking and error analysis
 		# Look at ID filter (idf) error types
+		error_dict = {}
 		mg_idf_errors = []
 		for index in mg_tetra_df.index:
-			trimmed_index = index.rsplit('|', 1)[1].rsplit('_', 1)[0]
-			if (index in pass_list) and (trimmed_index in sag_raw_contig_headers):
+			contig_header = index.rsplit('|', 1)[0]
+			if ((index in pass_list) and
+				(contig2taxid[contig_header] == sag_taxid)
+					):
 				mg_idf_errors.append('TruePos')
-			elif (index in pass_list) and (trimmed_index not in sag_raw_contig_headers):
+			elif ((index in pass_list) and
+					(contig2taxid[contig_header] != sag_taxid)
+					):
 					mg_idf_errors.append('FalsePos')
-			elif (index not in pass_list) and (trimmed_index in sag_raw_contig_headers):
+			elif ((index not in pass_list) and
+					(contig2taxid[contig_header] == sag_taxid)
+					):
 				mg_idf_errors.append('FalseNeg')
-			elif (index not in pass_list) and (trimmed_index not in sag_raw_contig_headers):
+			elif ((index not in pass_list) and
+					(contig2taxid[contig_header] != sag_taxid)
+					):
 				mg_idf_errors.append('TrueNeg')
-		track_recruits_df = pd.DataFrame(mg_idf_errors, columns=['idf_errors'],
-											index=mg_tetra_df.index)
+		#track_recruits_df = pd.DataFrame(mg_idf_errors, columns=['idf_errors'],
+		#									index=mg_tetra_df.index)
 		
 		error_dict['idf_errors'] = mg_idf_errors
 
@@ -607,19 +626,13 @@ def main():
 																)
 		#print('[SAG+]: Of those, %s were True Positives' % (str(len(set(TP_list)))))
 		
-		# Map contigs to taxid
-		taxmap_df = pd.read_csv(tax_map, sep='\t', header=0)
-		taxid2name_df = pd.read_csv(taxid_file, sep='\t', header=0)
-		taxid2name_df['sp_taxid'] = [int(x) for x in taxid2name_df['@@TAXID']]
-		taxid2name_df['sp_name'] = [x.split('|')[-1] for x in taxid2name_df['TAXPATHSN']]
-
 		# Save Predicted SAG contigs to a fasta file
 		fasta_out_file = join(save_path, sag_id + '.predicted_contigs.fasta')
 		taxa_cnt_dict = {}
 		with open(fasta_out_file, 'w') as fasta_out:
 			for header, seq in zip(mg_headers, mg_subs):
 				contig_id = header.rsplit('|', 1)[0]
-				tax_id = taxmap_df.loc[taxmap_df['@@SEQUENCEID'] == contig_id][
+				tax_id = contig_taxmap_df.loc[contig_taxmap_df['@@SEQUENCEID'] == contig_id][
 																		'TAXID'].values[0]
 				if header in SAG_pred_list:
 					new_header = '>' + header + '|' + str(tax_id)
@@ -632,7 +645,7 @@ def main():
 		taxa_cnt_df = pd.DataFrame.from_dict(taxa_cnt_dict, orient='index',
 												columns=['count']
 												)
-		taxa_cnt_df['sp_name'] = [list(taxid2name_df.loc[taxid2name_df['sp_taxid'] == int(x)
+		taxa_cnt_df['sp_name'] = [list(sag_taxmap_df.loc[sag_taxmap_df['sp_taxid'] == int(x)
 									]['sp_name'].values)[0] for x in taxa_cnt_df.index
 									]
 		percent_list = []
