@@ -335,6 +335,11 @@ def mock_SAG(fasta_file):
 	return half_list, all_headers
 
 
+def kmer_ID_filter():
+
+
+
+
 def main():
 	sag_path = sys.argv[1]
 	mg_file = sys.argv[2]
@@ -353,10 +358,8 @@ def main():
 	# TODO: build argv interface
 	# TODO: extract all magic numbers to be built into argv
 	# TODO: Refactor all definitions, they are a mess :/
-	# TODO: Fit UMAP output to model and test with AIC, which model fits best?
-	# TODO: combine error into one value, remove subseq map file creation
-	# TODO: add abundance(coverage) data to analysis
 	# TODO: output number of tetras/kmers skipped b/c of ambiguous nucs
+	# TODO: cythonize tetra_cnt and calc_seg to optimize
 
 	if isdir(sag_path):
 		print('[SAG+]: Directory specified, looking for .fasta files within')
