@@ -4,22 +4,23 @@ import pandas as pd
 #  TODO: bring in other defs, imports, cythonize
 
 class seqman:
-    def __init__(seq_headers, contig_subseqs, comp_hash_set, kmer_L,
-    				seq_list, n, o_lap):
-        self.seq_headers = seq_headers
-        self.contig_subseqs = contig_subseqs
-        self.comp_hash_set = comp_hash_set
-        self.kmer_L = kmer_L
-        self.seq_list = seq_list
-        self.l_max = l_max
-        self.o_lap = o_lap
-        self.seq = seq
+	def __init__(seq_headers, contig_subseqs, comp_hash_set, kmer_L,
+					seq_list, n, o_lap):
+		self.seq_headers = seq_headers
+		self.contig_subseqs = contig_subseqs
+		self.comp_hash_set = comp_hash_set
+		self.kmer_L = kmer_L
+		self.seq_list = seq_list
+		self.l_max = l_max
+		self.o_lap = o_lap
+		self.seq = seq
 
-        
-    def kmer_ID_filter(self.seq_headers, self.contig_subseqs, self.comp_hash_set,
-    					self.kmer_L
-    					):
-    	"Performs kmer hash comparison between comp_hash_set and hashes from contig_subseqs"
+		
+	def kmer_ID_filter(self.seq_headers, self.contig_subseqs, self.comp_hash_set,
+						self.kmer_L
+						):
+		"Performs kmer hash comparison between comp_hash_set and hashes from contig_subseqs"
+		cdef int 
 		pass_list = []
 		for header, frag in zip(self.seq_headers, self.contig_subseqs):
 			tmp, Ls = kmer_slide([(header, frag)], self.kmer_L, self.kmer_L - 1)
@@ -63,6 +64,7 @@ class seqman:
 			seq_frags.append(self.seq)
 
 		return seq_frags
+
 
 	def tetra_cnt(self.seq_list):
 		"Build canonical tetranucleotide frequency dataframe from seq list"
