@@ -106,9 +106,9 @@ def get_frags(seq, l_max, o_lap):
 		seq_frags.append(seq)
 
 	return seq_frags
-	
 
-def get_subseqs(seq_list, n, o_lap):
+
+def get_subseqs(seq_list, n, o_lap): # This is called kmer_slide in sagtools.pyx
 	all_sub_seqs = []
 	all_sub_headers = []
 	for seq_tup in seq_list:
