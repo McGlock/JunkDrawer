@@ -570,22 +570,66 @@ def main():
 
 		error_dict['htf_errors'] = mg_htf_errors
 
-		# Build GMM for coverage info
-		sag_abund_file
-		
-		mg_abund_file
+		# Coverage depth filter
+		sag_abund_df = pd.DataFrame(sag_abund_file, sep='\t', header=0)
+		sag_abund_col_list = []
+		sag_var_col_list = []
+		for col in sag_abund_df.columns:
+			if col.rsplit('.', 1)[-1] == 'bam':
+				sag_abund_col_list.append(col)
+			elif col.rsplit('.', 1)[-1] == 'bam-var':
+				sag_var_col_list.append(col)
+		sag_ave_abund = mean(list(sag_abund_df[sag_abund_col_list].mean(axis=1)))
+		sag_ave_var = mean(list(sag_abund_df[sag_var_col_list].mean(axis=1)))
+		sag_lower_bound = sag_ave_abund - sag_ave_var
+		sag_upper_bound = sag_ave_abund + sag_ave_var
+		# Error analysis with coverage depth filter (cdf)
+		mg_abund_df = pd.DataFrame(mg_abund_file, sep='\t', header=0)
+		mg_abund_col_list = []
+		mg_var_col_list = []
+		for col in mg_abund_df.columns:
+			if col.rsplit('.', 1)[-1] == 'bam':
+				mg_abund_col_list.append(col)
+			elif col.rsplit('.', 1)[-1] == 'bam-var':
+				mg_var_col_list.append(col)
+		mg_cdf_errors = []
+		for index, row in mg_abund_df.iterrows():
+			mg_ave_abund = row[abund_col_list].mean(axis=1)
+			mg_ave_var = row[var_col_list].mean(axis=1)
+			mg_lower_bound = mg_ave_abund - mg_ave_var
+			mg_upper_bound = mg_ave_abund + mg_ave_var
+			contig_header = row['contigName']
+			if ((sag_lower_bound <= mg_ave_abund <= sag_upper_bound) and
+					(mg_lower_bound <= sag_ave_abund <= mg_upper_bound) and
+					(contig2taxid[contig_header] == sag_taxid)
+					):
+				mg_cdf_errors.append('TruePos')
+			elif ((sag_lower_bound <= mg_ave_abund <= sag_upper_bound) and
+					(mg_lower_bound <= sag_ave_abund <= mg_upper_bound) and
+					(contig2taxid[contig_header] != sag_taxid)
+					):
+				mg_cdf_errors.append('FalsePos')
+			elif (((sag_lower_bound > mg_ave_abund) or (mg_ave_abund > sag_upper_bound)) and
+					((mg_lower_bound > sag_ave_abund) or (sag_ave_abund > mg_upper_bound)) and
+					(contig2taxid[contig_header] == sag_taxid)
+					):
+				mg_cdf_errors.append('FalseNeg')
+			elif (((sag_lower_bound > mg_ave_abund) or (mg_ave_abund > sag_upper_bound)) and
+					((mg_lower_bound > sag_ave_abund) or (sag_ave_abund > mg_upper_bound)) and
+					(contig2taxid[contig_header] != sag_taxid)
+					):
+				mg_cdf_errors.append('TrueNeg')
+		error_dict['cdf_errors'] = mg_cdf_errors
 
-
-		isSAG_pc_dict = {}
+		# Correlation PC filter, also tetramer Hz filter (thf) w/o GMM
+		isSAG_pc_dict = {}  # TODO: this is kinda redundant with htf, probs removable
 		for pc_pair in combinations(pc_col_names, 2):
 			pc_pair = list(pc_pair)
 			subset_df = umap_df[pc_pair]
 			subsag_umap_df = sag_umap_df[pc_pair]
 			submg_umap_df = mg_umap_df[pc_pair]
-
 			sag_std = subsag_umap_df.std().values
 			sag_mean = subsag_umap_df.mean().values
-			#sag_covar = subsag_umap_df.cov().values
 			sag_corr = subsag_umap_df.corr().values
 			### Used for seq tracking and error analysis
 			# Draw ellispe that colors by L-mer error stats
