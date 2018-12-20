@@ -305,9 +305,14 @@ def calc_err(df):
 		else:
 			TN = 0
 
-		cnt_df[col + '_precision'] = TP/(TP + FP)
-		cnt_df[col + '_sensitivity'] = TP/(TP + FN)
-		cnt_df[col + '_specificity'] = TN/(TN + FP)
+		cnt_df[col + '_precision'] = TP / (TP + FP)
+		cnt_df[col + '_sensitivity'] = TP / (TP + FN)
+		cnt_df[col + '_specificity'] = TN / (TN + FP)
+		mcc_numer = (TP * TN) - (FP * FN)
+		mcc_denom = (TP + FP)(TP + FN)(TN + FP)(TN + FN)
+		if mcc == 0:
+			mcc_denom = 1
+		cnt_df[col + '_MCC'] = mcc_numer / (mcc_denom**(1 / 2))
 
 		err_df_list.append(cnt_df)
 	error_df = functools.reduce(lambda left,right: pd.merge(left,right,on='err_type'),
