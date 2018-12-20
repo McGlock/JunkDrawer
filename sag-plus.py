@@ -24,11 +24,14 @@ from sklearn.neighbors import KernelDensity
 from sklearn.base import BaseEstimator, ClassifierMixin
 import pickle
 import functools
+# trying cython
+import pyximport; pyximport.install()
+import sagtools
 
 
 sns.set(style='white', context='notebook', rc={'figure.figsize':(14,10)})
 
-
+'''
 nuc_naughty_list = ['r', 'y', 's', 'w', 'k',
 					'm', 'b', 'd', 'h', 'v', 'n']
 
@@ -120,7 +123,7 @@ def get_subseqs(seq_list, n, o_lap): # This is called kmer_slide in sagtools.pyx
 		all_sub_headers.extend(sub_headers)	
 
 	return all_sub_headers, all_sub_seqs
-
+'''
 
 def get_seqs(fasta_file):
 	sag_contigs = []
@@ -136,7 +139,7 @@ def get_seqs(fasta_file):
 
 	return sag_contigs
 
-
+'''
 def calc_seg(subseqs):
 	seg_list = []
 	for seq in subseqs:
@@ -154,7 +157,7 @@ def calc_nuc(nuc, ind):
 	nuc_hash = nuc_dict[nuc] * (4**ind)
 
 	return nuc_hash
-
+'''
 
 def plot_umap(df, sv_pth='./', n_neighbors=15, min_dist=0.1,
 				n_components=2, metric='euclidean', random_state=42,
@@ -338,7 +341,7 @@ def mock_SAG(fasta_file):
 
 	return half_list, all_headers
 
-
+'''
 def kmer_ID_filter(mg_headers, mg_subs, sag_hashes_set):
 	pass_list = []
 	for mg_header, mg_frag in zip(mg_headers, mg_subs):  # TODO: this is really slow :(
@@ -350,7 +353,7 @@ def kmer_ID_filter(mg_headers, mg_subs, sag_hashes_set):
 			pass_list.append(mg_header)
 
 	return pass_list
-
+'''
 
 def main():
 	sag_path = sys.argv[1]
@@ -363,6 +366,8 @@ def main():
 	contig_tax_map = sys.argv[8]
 	sag_tax_map = sys.argv[9]
 	num_components = 3 # int(sys.argv[8])
+
+	sq = sagtools.SeqMan()
 
 	# magic numbers
 	#num_components = 2
@@ -401,8 +406,11 @@ def main():
 			print('[SAG+]: Calculating tetramer frequencies for %s' % sag_id)
 			### Used for Mock SAGs (need to change when done testing)
 			sag_contigs, sag_raw_contig_headers = mock_SAG(sag_file)
-			sag_headers, sag_subs = get_subseqs(sag_contigs, max_contig_len, overlap_len)
-			sag_tetra_df = pd.DataFrame.from_dict(tetra_cnt(sag_subs))
+			sag_headers, sag_subs = sq.kmer_slide(seq_tup_list=sag_contigs,
+													l_max=max_contig_len,
+													o_lap=overlap_len
+													)
+			sag_tetra_df = pd.DataFrame.from_dict(sq.tetra_cnt(sag_subs))
 			sag_tetra_df['contig_id'] = sag_headers
 			sag_tetra_df.set_index('contig_id', inplace=True)
 			sag_tetra_df.to_csv(join(save_path, sag_id + '.tsv'), sep='\t')
@@ -424,8 +432,8 @@ def main():
 			print('[SAG+]: Unpickled %s kmer hashes' % sag_id)
 		else:
 			print('[SAG+]: Calculating kmer hashes for %s' % sag_id)
-			tmp, sag_Ls = get_subseqs(sag_contigs, 24, 23)
-			sag_hashes = calc_seg(sag_Ls)
+			tmp, sag_Ls = sq.kmer_slide(sag_contigs, 24, 23)
+			sag_hashes = sq.calc_seg(sag_Ls)
 			sag_hashes.sort(reverse=True)
 			sag_hashes_set = set(sag_hashes)
 			with open(join(save_path, sag_id + '.pkl'), 'wb') as p:
@@ -435,18 +443,23 @@ def main():
 		mg_basename = basename(mg_file)
 		mg_id = mg_basename.split('.')[0]
 		if isfile(join(save_path, mg_id + '.tsv')):
-			mg_tetra_df = pd.read_csv(join(save_path, mg_id + '.tsv'), sep='\t', index_col=0,
-									header=0)
+			mg_tetra_df = pd.read_csv(join(save_path, mg_id + '.tsv'), sep='\t',
+										index_col=0, header=0
+										)
 			mg_contigs = get_seqs(mg_file)
 			#mg_contigs_trm_header = [(x[0].rsplit('|', 1)[0], x[1]) for x in mg_contigs]
-			mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
+			mg_headers, mg_subs = sq.kmer_slide(mg_contigs,	max_contig_len,
+												overlap_len
+												)
 			print('[SAG+]: Found %s MetaG tetranucleotide tsv file' % mg_id)
 		else:
 			print('[SAG+]: Calculating tetramer frequencies for %s' % mg_id)
 			mg_contigs = get_seqs(mg_file)
 			#mg_contigs_trm_header = [(x[0].rsplit('|', 1)[1], x[1]) for x in mg_contigs]
-			mg_headers, mg_subs = get_subseqs(mg_contigs, max_contig_len, overlap_len)
-			mg_tetra_df = pd.DataFrame.from_dict(tetra_cnt(mg_subs))
+			mg_headers, mg_subs = sq.kmer_slide(mg_contigs, max_contig_len,
+												overlap_len
+												)
+			mg_tetra_df = pd.DataFrame.from_dict(sq.tetra_cnt(mg_subs))
 			mg_tetra_df['contig_id'] = mg_headers
 			mg_tetra_df.set_index('contig_id', inplace=True)
 			mg_tetra_df.to_csv(join(save_path, mg_id + '.tsv'), sep='\t')
@@ -458,10 +471,15 @@ def main():
 			print('[SAG+]: Unpickled %s kmer ID filter' % sag_id)
 		else:
 			print('[SAG+]: Performing kmer ID filtering')
-			pass_list = kmer_ID_filter(mg_headers, mg_subs, sag_hashes_set)
+			pass_list = sq.kmer_ID_filter(seq_headers=mg_headers, contig_subseqs=mg_subs,
+											comp_hash_set=sag_hashes_set, kmer_L=24)
 			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
 				pickle.dump(pass_list, p)
 		
+
+		sys.exit()  # Added for testing cython module
+
+
 		# Map genome id and contig id to taxid for error analysis
 		contig_taxmap_df = pd.read_csv(contig_tax_map, sep='\t', header=0)
 		sag_taxmap_df = pd.read_csv(sag_tax_map, sep='\t', header=0)
@@ -584,7 +602,7 @@ def main():
 		error_dict['htf_errors'] = mg_htf_errors
 
 		# Coverage depth filter
-		sag_abund_df = pd.DataFrame(sag_abund_file, sep='\t', header=0)
+		sag_abund_df = pd.read_csv(sag_abund_file, sep='\t', header=0)
 		sag_abund_col_list = []
 		sag_var_col_list = []
 		for col in sag_abund_df.columns:
@@ -597,7 +615,7 @@ def main():
 		sag_lower_bound = sag_ave_abund - sag_ave_var
 		sag_upper_bound = sag_ave_abund + sag_ave_var
 		# Error analysis with coverage depth filter (cdf)
-		mg_abund_df = pd.DataFrame(mg_abund_file, sep='\t', header=0)
+		mg_abund_df = pd.read_csv(mg_abund_file, sep='\t', header=0)
 		mg_abund_col_list = []
 		mg_var_col_list = []
 		for col in mg_abund_df.columns:
