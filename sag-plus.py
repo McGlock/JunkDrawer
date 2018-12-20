@@ -74,6 +74,7 @@ def tetra_cnt(seq_list):
 	# convert the final dict into a pd dataframe for ease
 	tetra_cnt_df = pd.DataFrame.from_dict(tetra_cnt_dict)
 	dedupped_df = tetra_cnt_df.loc[:, (tetra_cnt_df != 0.0).any(axis=0)]
+
 	return dedupped_df
 
 
@@ -100,16 +101,12 @@ def get_frags(seq, l_max, o_lap):
 				frag = seq[i:i+l_max]
 			else:
 				frag = seq[-l_max:]
-			#if any(nuc in frag for nuc in nuc_naughty_list):
-			#	1+1  # TODO: not sure how to handle these
-			#else:
 			seq_frags.append(frag)
-	#elif 'n' not in seq:
 	else:
 		seq_frags.append(seq)
-	#else:
-	#	1+1  # TODO: not sure how to handle these
+
 	return seq_frags
+	
 
 def get_subseqs(seq_list, n, o_lap):
 	all_sub_seqs = []
@@ -121,6 +118,7 @@ def get_subseqs(seq_list, n, o_lap):
 		sub_headers = [header + '_' + str(i) for i, x in enumerate(sub_list, start=0)]
 		all_sub_seqs.extend(sub_list)
 		all_sub_headers.extend(sub_headers)	
+
 	return all_sub_headers, all_sub_seqs
 
 
@@ -135,6 +133,7 @@ def get_seqs(fasta_file):
 			seq = ''.join(split_rec[1:])
 			if seq != '':
 				sag_contigs.append((header, seq))
+
 	return sag_contigs
 
 
@@ -146,12 +145,14 @@ def calc_seg(subseqs):
 			if nuc not in nuc_naughty_list:  # TODO: don't know what to do with these
 				seg_sum += calc_nuc(nuc, i)
 		seg_list.append(seg_sum)
+
 	return seg_list
 
 
 def calc_nuc(nuc, ind):
 	nuc_dict = {'a': 0, 't': 1, 'c': 2, 'g': 3}
 	nuc_hash = nuc_dict[nuc] * (4**ind)
+
 	return nuc_hash
 
 
@@ -170,6 +171,7 @@ def plot_umap(df, sv_pth='./', n_neighbors=15, min_dist=0.1,
 	targets_ints = [x[0] for x in enumerate(targets, start=0)]
 
 	embedding = fit.fit_transform(features)
+
 	return embedding
 
 
@@ -192,6 +194,7 @@ def draw_ellipse(position, covariance, ax=None, **kwargs):
 		nsig_height = nsig * height
 		ax.add_patch(Ellipse(position, nsig_width, nsig_height,
 							 angle, **kwargs))
+
 	return position, nsig_width, nsig_height, angle
 
 	
@@ -332,6 +335,7 @@ def mock_SAG(fasta_file):
 		seq = genome_contigs[0][1]
 		half_list = [(header,seq[:int(len(seq)/2)])]
 	all_headers = [x[0] for x in genome_contigs]
+
 	return half_list, all_headers
 
 
