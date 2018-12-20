@@ -1,11 +1,12 @@
 from itertools import product
 import pandas as pd
 
-#  TODO: bring in other defs, imports, cythonize
+#  TODO: might be static typing to much, should ask someone about that.
 
 class seqman:
-	def __init__(seq_headers, contig_subseqs, comp_hash_set, kmer_L,
-					seq_list, n, o_lap):
+	def __init__(list seq_headers, list contig_subseqs, set comp_hash_set,
+					int kmer_L,	list seq_list, int l_max, int o_lap, list seq_tup_list
+					):
 		self.seq_headers = seq_headers
 		self.contig_subseqs = contig_subseqs
 		self.comp_hash_set = comp_hash_set
@@ -14,14 +15,21 @@ class seqman:
 		self.l_max = l_max
 		self.o_lap = o_lap
 		self.seq = seq
+		self.seq_tup_list = seq_tup_list
 
 		
 	def kmer_ID_filter(self.seq_headers, self.contig_subseqs, self.comp_hash_set,
-						self.kmer_L
+						int self.kmer_L
 						):
 		"Performs kmer hash comparison between comp_hash_set and hashes from contig_subseqs"
-		cdef int 
-		pass_list = []
+		cdef list pass_list = []
+		cdef str header
+		cdef str frag
+		cdef list tmp
+		cdef list Ls
+		cdef list hashes
+		cdef set hashes_set
+
 		for header, frag in zip(self.seq_headers, self.contig_subseqs):
 			tmp, Ls = kmer_slide([(header, frag)], self.kmer_L, self.kmer_L - 1)
 			hashes = calc_seg(Ls)
@@ -33,10 +41,19 @@ class seqman:
 		return pass_list
 
 
-	def kmer_slide(self.seq_list, self.l_max, self.o_lap):
+	def kmer_slide(self.seq_tup_list, self.l_max, self.o_lap):
 		"Builds kmers of len l_max and overlap o_lap"
-		all_sub_seqs = []
-		all_sub_headers = []
+		cdef list all_sub_seqs = []
+		cdef list all_sub_headers = []
+		cdef tuple seq_tup
+		cdef str header
+		cdef str seq
+		cdef str clean_seq
+		cdef list sub_list
+		cdef list sub_headers
+		cdef int i
+		cdef str x
+
 		for seq_tup in self.seq_list:
 			header, seq = seq_tup
 			clean_seq = seq.strip('\n').lower()
@@ -51,7 +68,11 @@ class seqman:
 	def get_frags(self.seq, self.l_max, self.o_lap):
 		"Fragments seq into subseqs of length l_max and overlap of o_lap"
 		"Leftover tail overlaps with tail-1"
-		seq_frags = []
+		cdef list seq_frags = []
+		cdef int offset
+		cdef int i
+		cdef str frag
+
 		if (self.l_max != 0) and (len(self.seq) > self.l_max):
 			offset = self.l_max - self.o_lap
 			for i in range(0, len(self.seq), offset):
@@ -68,10 +89,26 @@ class seqman:
 
 	def tetra_cnt(self.seq_list):
 		"Build canonical tetranucleotide frequency dataframe from seq list"
+		cdef dict tetra_cnt_dict
+		cdef str x
+		cdef str seq
+		cdef dict tmp_dict
+		cdef str k
+		cdef str v
+		cdef int total_kmer_cnt
+		cdef str clean_seq
+		cdef list kmer_list
+		cdef str tetra
+		cdef int count_tetra
+		cdef dict dedup_dict
+		cdef dict tetra_prop_dict
+		cdef double t_prop
+ 
+
 		# Dict of all tetramers
 		tetra_cnt_dict = {''.join(x):[] for x in product('atgc', repeat=4)}
 		# count up all tetramers and also populate the tetra dict
-		for seq in seq_list:
+		for seq in self.seq_list:
 			tmp_dict = {k: 0 for k, v in tetra_cnt_dict.items()}
 			total_kmer_cnt = 0
 			clean_seq = seq.strip('\n').lower()
