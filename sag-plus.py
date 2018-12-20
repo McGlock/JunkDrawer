@@ -335,9 +335,17 @@ def mock_SAG(fasta_file):
 	return half_list, all_headers
 
 
-def kmer_ID_filter():
+def kmer_ID_filter(mg_headers, mg_subs, sag_hashes_set):
+	pass_list = []
+	for mg_header, mg_frag in zip(mg_headers, mg_subs):  # TODO: this is really slow :(
+		tmp, mg_Ls = get_subseqs([(mg_header, mg_frag)], 24, 23)
+		mg_hashes = calc_seg(mg_Ls)
+		mg_hashes.sort(reverse=True)
+		mg_hashes_set = set(mg_hashes)
+		if sag_hashes_set.intersection(mg_hashes_set):
+			pass_list.append(mg_header)
 
-
+	return pass_list
 
 
 def main():
@@ -446,14 +454,7 @@ def main():
 			print('[SAG+]: Unpickled %s kmer ID filter' % sag_id)
 		else:
 			print('[SAG+]: Performing kmer ID filtering')
-			pass_list = []
-			for mg_header, mg_frag in zip(mg_headers, mg_subs):  # TODO: this is really slow :(
-				tmp, mg_Ls = get_subseqs([(mg_header, mg_frag)], 24, 23)
-				mg_hashes = calc_seg(mg_Ls)
-				mg_hashes.sort(reverse=True)
-				mg_hashes_set = set(mg_hashes)
-				if sag_hashes_set.intersection(mg_hashes_set):
-					pass_list.append(mg_header)
+			pass_list = kmer_ID_filter(mg_headers, mg_subs, sag_hashes_set)
 			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
 				pickle.dump(pass_list, p)
 		
