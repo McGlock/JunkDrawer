@@ -386,7 +386,6 @@ def main():
 	elif isfile(sag_path):
 		print('[SAG+]: File specified, processing %s' % basename(sag_path))
 		sag_list = [sag_path]
-
 	error_df_list = []
 	taxa_tracking_list = []
 	for sag_file in sag_list:
@@ -476,7 +475,7 @@ def main():
 			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
 				pickle.dump(pass_list, p)
 		
-
+	'''
 		sys.exit()  # Added for testing cython module
 
 
@@ -781,7 +780,7 @@ def main():
 	final_err_df = pd.concat(error_df_list)  # TODO: combine error stats into one value
 	final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
 	### END
-
+	'''
 
 if __name__ == "__main__":
 	main()
