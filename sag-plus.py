@@ -24,9 +24,12 @@ from sklearn.neighbors import KernelDensity
 from sklearn.base import BaseEstimator, ClassifierMixin
 import pickle
 import functools
+import statistics
+
 # trying cython
 import pyximport; pyximport.install()
 import sagtools
+
 
 
 sns.set(style='white', context='notebook', rc={'figure.figsize':(14,10)})
@@ -315,8 +318,8 @@ def calc_err(df):
 		cnt_df[col + '_sensitivity'] = TP / (TP + FN)
 		cnt_df[col + '_specificity'] = TN / (TN + FP)
 		mcc_numer = (TP * TN) - (FP * FN)
-		mcc_denom = (TP + FP)(TP + FN)(TN + FP)(TN + FN)
-		if mcc == 0:
+		mcc_denom = (TP + FP)*(TP + FN)*(TN + FP)*(TN + FN)
+		if mcc_denom == 0:
 			mcc_denom = 1
 		cnt_df[col + '_MCC'] = mcc_numer / (mcc_denom**(1 / 2))
 
@@ -358,7 +361,7 @@ def kmer_ID_filter(mg_headers, mg_subs, sag_hashes_set):
 def main():
 	sag_path = sys.argv[1]
 	mg_file = sys.argv[2]
-	sag_abund_file = sys.argv[3]
+	#sag_abund_file = sys.argv[3]
 	mg_abund_file = sys.argv[4]
 	max_contig_len = int(sys.argv[5])
 	overlap_len = int(sys.argv[6])
@@ -381,8 +384,8 @@ def main():
 	if isdir(sag_path):
 		print('[SAG+]: Directory specified, looking for .fasta files within')
 		sag_list = [join(sag_path, f) for f in
-								listdir(sag_path) if f.split('.')[-1] == 'fasta'
-								]
+					listdir(sag_path) if (f.split('.')[-1] == 'fasta' or f.split('.')[-1] == 'fna')
+					]
 	elif isfile(sag_path):
 		print('[SAG+]: File specified, processing %s' % basename(sag_path))
 		sag_list = [sag_path]
@@ -390,8 +393,9 @@ def main():
 	taxa_tracking_list = []
 	for sag_file in sag_list:
 		sag_basename = basename(sag_file)
-		sag_id = sag_basename.split('.')[0]
-		
+		sag_id = sag_basename.rsplit('.', 1)[0]
+		sag_abund_file = join(dirname(sag_path), sag_id + '.CAMI_low_RL.abund_list.txt')
+
 		# SAG Tetras
 		if isfile(join(save_path, sag_id + '.tsv')):
 			sag_contigs, sag_raw_contig_headers = mock_SAG(sag_file)
@@ -474,9 +478,8 @@ def main():
 											comp_hash_set=sag_hashes_set, kmer_L=24)
 			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
 				pickle.dump(pass_list, p)
-		
-	'''
-		sys.exit()  # Added for testing cython module
+
+		#sys.exit()  # Added for testing cython module
 
 
 		# Map genome id and contig id to taxid for error analysis
@@ -575,8 +578,8 @@ def main():
 		sag_score_max = max(sag_scores_df.values)[0]
 		mg_scores = gmm.score_samples(mg_umap_df.values)
 		mg_scores_df = pd.DataFrame(data=mg_scores, index=mg_umap_df.index)
-		mg_score_min = min(mg_scores_df.values)[0]
-		mg_score_max = max(mg_scores_df.values)[0]
+		#mg_score_min = min(mg_scores_df.values)[0]
+		#mg_score_max = max(mg_scores_df.values)[0]
 		mg_htf_errors = []
 		for index, row in mg_scores_df.iterrows():
 			score = row[0]
@@ -609,8 +612,8 @@ def main():
 				sag_abund_col_list.append(col)
 			elif col.rsplit('.', 1)[-1] == 'bam-var':
 				sag_var_col_list.append(col)
-		sag_ave_abund = mean(list(sag_abund_df[sag_abund_col_list].mean(axis=1)))
-		sag_ave_var = mean(list(sag_abund_df[sag_var_col_list].mean(axis=1)))
+		sag_ave_abund = statistics.mean(list(sag_abund_df[sag_abund_col_list].mean(axis=1)))
+		sag_ave_var = statistics.mean(list(sag_abund_df[sag_var_col_list].mean(axis=1)))
 		sag_lower_bound = sag_ave_abund - sag_ave_var
 		sag_upper_bound = sag_ave_abund + sag_ave_var
 		# Error analysis with coverage depth filter (cdf)
@@ -623,12 +626,14 @@ def main():
 			elif col.rsplit('.', 1)[-1] == 'bam-var':
 				mg_var_col_list.append(col)
 		mg_cdf_errors = []
-		for index, row in mg_abund_df.iterrows():
-			mg_ave_abund = row[abund_col_list].mean(axis=1)
-			mg_ave_var = row[var_col_list].mean(axis=1)
+		for index in mg_tetra_df.index:
+			contig_header = index.rsplit('|', 1)[0]
+			mg_ave_abund = mg_abund_df.loc[mg_abund_df['contigName'] == contig_header
+											][mg_abund_col_list].mean()[0]
+			mg_ave_var = mg_abund_df.loc[mg_abund_df['contigName'] == contig_header
+											][mg_var_col_list].mean()[0]
 			mg_lower_bound = mg_ave_abund - mg_ave_var
 			mg_upper_bound = mg_ave_abund + mg_ave_var
-			contig_header = row['contigName']
 			if ((sag_lower_bound <= mg_ave_abund <= sag_upper_bound) and
 					(mg_lower_bound <= sag_ave_abund <= mg_upper_bound) and
 					(contig2taxid[contig_header] == sag_taxid)
@@ -639,16 +644,18 @@ def main():
 					(contig2taxid[contig_header] != sag_taxid)
 					):
 				mg_cdf_errors.append('FalsePos')
-			elif (((sag_lower_bound > mg_ave_abund) or (mg_ave_abund > sag_upper_bound)) and
-					((mg_lower_bound > sag_ave_abund) or (sag_ave_abund > mg_upper_bound)) and
+			elif (((sag_lower_bound > mg_ave_abund) or (mg_ave_abund > sag_upper_bound) or
+					(mg_lower_bound > sag_ave_abund) or (sag_ave_abund > mg_upper_bound)) and
 					(contig2taxid[contig_header] == sag_taxid)
 					):
 				mg_cdf_errors.append('FalseNeg')
-			elif (((sag_lower_bound > mg_ave_abund) or (mg_ave_abund > sag_upper_bound)) and
-					((mg_lower_bound > sag_ave_abund) or (sag_ave_abund > mg_upper_bound)) and
+				print('FalseNeg')
+			elif (((sag_lower_bound > mg_ave_abund) or (mg_ave_abund > sag_upper_bound) or
+					(mg_lower_bound > sag_ave_abund) or (sag_ave_abund > mg_upper_bound)) and
 					(contig2taxid[contig_header] != sag_taxid)
 					):
 				mg_cdf_errors.append('TrueNeg')
+
 		error_dict['cdf_errors'] = mg_cdf_errors
 
 		# Correlation PC filter, also tetramer Hz filter (thf) w/o GMM
@@ -780,7 +787,6 @@ def main():
 	final_err_df = pd.concat(error_df_list)  # TODO: combine error stats into one value
 	final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
 	### END
-	'''
 
 if __name__ == "__main__":
 	main()
