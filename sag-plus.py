@@ -362,12 +362,12 @@ def main():
 	sag_path = sys.argv[1]
 	mg_file = sys.argv[2]
 	#sag_abund_file = sys.argv[3]
-	mg_abund_file = sys.argv[4]
-	max_contig_len = int(sys.argv[5])
-	overlap_len = int(sys.argv[6])
-	save_path = sys.argv[7]
-	contig_tax_map = sys.argv[8]
-	sag_tax_map = sys.argv[9]
+	mg_abund_file = sys.argv[3]
+	max_contig_len = int(sys.argv[4])
+	overlap_len = int(sys.argv[5])
+	save_path = sys.argv[6]
+	contig_tax_map = sys.argv[7]
+	sag_tax_map = sys.argv[8]
 	num_components = 3 # int(sys.argv[8])
 
 	sq = sagtools.SeqMan()
