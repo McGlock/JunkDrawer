@@ -495,9 +495,6 @@ def main():
 			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
 				pickle.dump(pass_list, p)
 
-		#sys.exit()  # Added for testing cython module
-
-
 		# Map genome id and contig id to taxid for error analysis
 		contig_taxmap_df = pd.read_csv(contig_tax_map, sep='\t', header=0)
 		sag_taxmap_df = pd.read_csv(sag_tax_map, sep='\t', header=0)
@@ -513,23 +510,32 @@ def main():
 
 		### Used for seq tracking and error analysis
 		# Look at ID filter (idf) error types
+		### Experiment ###
+		# If any subseq in full contig is in pass_list, whole contig is passes
+		contig_pass_list = [x.rsplit('|', 1)[0] for x in pass_list]
+		### Experiment ###
+
 		error_dict = {}
 		mg_idf_errors = []
 		for index in mg_tetra_df.index:
 			contig_header = index.rsplit('|', 1)[0]
-			if ((index in pass_list) and
+			#if ((index in pass_list) and
+			if ((contig_header in contig_pass_list) and
 				(contig2taxid[contig_header] == sag_taxid)
 					):
 				mg_idf_errors.append('TruePos')
-			elif ((index in pass_list) and
+			#elif ((index in pass_list) and
+			elif ((contig_header in contig_pass_list) and
 					(contig2taxid[contig_header] != sag_taxid)
 					):
 					mg_idf_errors.append('FalsePos')
-			elif ((index not in pass_list) and
+			#elif ((index not in pass_list) and
+			elif ((contig_header not in contig_pass_list) and
 					(contig2taxid[contig_header] == sag_taxid)
 					):
 				mg_idf_errors.append('FalseNeg')
-			elif ((index not in pass_list) and
+			#elif ((index not in pass_list) and
+			elif ((contig_header not in contig_pass_list) and
 					(contig2taxid[contig_header] != sag_taxid)
 					):
 				mg_idf_errors.append('TrueNeg')
@@ -799,7 +805,7 @@ def main():
 	taxa_tracking_df = pd.concat(taxa_tracking_list)
 	taxa_tracking_df.to_csv(join(save_path, 'total_recruit_stats.tsv'), sep='\t')	
 	### Used for seq tracking and error analysis
-	final_err_df = pd.concat(error_df_list)  # TODO: combine error stats into one value
+	final_err_df = pd.concat(error_df_list)
 	final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
 	### END
 
