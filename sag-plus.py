@@ -313,20 +313,36 @@ def calc_err(df):
 			TN = cnt_df.loc[cnt_df['err_type'] == 'TrueNeg', col].values[0]
 		else:
 			TN = 0
+		
+		rows_list = []
+		filter_type = col.split('_')[0]
+		precision = TP / (TP + FP)
+		rows_list.append([filter_type, 'precision', precision])
+		sensitivity = TP / (TP + FN)
+		rows_list.append([filter_type, 'sensitivity', sensitivity])
+		specificity = TN / (TN + FP)
+		rows_list.append([filter_type, 'specificity', specificity])
+		type1_error = FP / (FP + TN)
+		rows_list.append([filter_type, 'type1_error', type1_error])
+		type2_error = FN / (FN + TP)
+		rows_list.append([filter_type, 'type2_error', type2_error])
+		F1_score = 2 * ((precision * sensitivity) / (precision + sensitivity))
+		rows_list.append([filter_type, 'F1_score', F1_score])
 
-		cnt_df[col + '_precision'] = TP / (TP + FP)
-		cnt_df[col + '_sensitivity'] = TP / (TP + FN)
-		cnt_df[col + '_specificity'] = TN / (TN + FP)
-		mcc_numer = (TP * TN) - (FP * FN)
-		mcc_denom = (TP + FP)*(TP + FN)*(TN + FP)*(TN + FN)
-		if mcc_denom == 0:
-			mcc_denom = 1
-		cnt_df[col + '_MCC'] = mcc_numer / (mcc_denom**(1 / 2))
+		#mcc_numer = (TP * TN) - (FP * FN)
+		#mcc_denom = (TP + FP)*(TP + FN)*(TN + FP)*(TN + FN)
+		#if mcc_denom == 0:
+		#	mcc_denom = 1
+		#cnt_df[col + '_MCC'] = mcc_numer / (mcc_denom**(1 / 2))
 
-		err_df_list.append(cnt_df)
-	error_df = functools.reduce(lambda left,right: pd.merge(left,right,on='err_type'),
-									err_df_list
-									)
+		err_df_list.extend(rows_list)
+		#err_df_list.append(cnt_df)
+
+	#error_df = functools.reduce(lambda left,right: pd.merge(left,right,on='err_type'),
+	#								err_df_list
+	#								)
+
+	error_df = pd.DataFrame(err_df_list, columns=['filter_type', 'statistic', 'score'])
 
 	return error_df
 
