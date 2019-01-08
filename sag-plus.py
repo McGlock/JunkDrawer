@@ -649,7 +649,6 @@ def main():
 					(contig2taxid[contig_header] == sag_taxid)
 					):
 				mg_cdf_errors.append('FalseNeg')
-				print('FalseNeg')
 			elif (((sag_lower_bound > mg_ave_abund) or (mg_ave_abund > sag_upper_bound) or
 					(mg_lower_bound > sag_ave_abund) or (sag_ave_abund > mg_upper_bound)) and
 					(contig2taxid[contig_header] != sag_taxid)
