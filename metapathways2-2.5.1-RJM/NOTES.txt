@@ -1,0 +1,26 @@
+# This document contains all the special notes I have for installing/running MetaPathways v2.5.1
+# Any "quick fixes" or bugs will be included for later use in the MP rebuild.
+
+################
+### DOWNLOAD ###
+################
+Downloaded MetaPathways v2.5.1 from https://github.com/hallamlab/metapathways2/releases/tag/v2.5.1
+Also downloaded databases as well.
+Links:
+https://github.com/hallamlab/metapathways2/archive/v2.5.1.tar.gz
+https://www.dropbox.com/s/sewcecys04dk0ho/CAZY_2014_09_04.zip?dl=0
+https://www.dropbox.com/s/ye3kpve041e0r39/MetaPathways_DBs.zip?dl=0
+
+############################################
+
+
+
+
+##################
+### UPDATE DBs ###
+##################
+
+[START HERE]
+
+############################################
+
