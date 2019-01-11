@@ -25,6 +25,8 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 import pickle
 import functools
 import statistics
+from datasketch import MinHash, MinHashLSH
+
 
 # trying cython
 import pyximport; pyximport.install()
@@ -410,11 +412,16 @@ def main():
 	for sag_file in sag_list:
 		sag_basename = basename(sag_file)
 		sag_id = sag_basename.rsplit('.', 1)[0]
-		sag_abund_file = join(dirname(sag_path), sag_id + '.CAMI_low_RL.abund_list.txt')
-
+		sag_abund_file = join(dirname(sag_path), sag_id + '.CAMI_low_RL.rpkm.csv')
+		
 		# SAG Tetras
 		if isfile(join(save_path, sag_id + '.tsv')):
 			sag_contigs, sag_raw_contig_headers = mock_SAG(sag_file)
+			sag_headers, sag_subs = sq.kmer_slide(seq_tup_list=sag_contigs,
+													l_max=max_contig_len,
+													o_lap=overlap_len
+													)
+			sag_sub_tup = zip(sag_headers, sag_subs)
 			sag_tetra_df = pd.read_csv(join(save_path, sag_id + '.tsv'),
 										sep='\t', index_col=0, header=0)
 
@@ -429,6 +436,7 @@ def main():
 													l_max=max_contig_len,
 													o_lap=overlap_len
 													)
+			sag_sub_tup = zip(sag_headers, sag_subs)
 			sag_tetra_df = pd.DataFrame.from_dict(sq.tetra_cnt(sag_subs))
 			sag_tetra_df['contig_id'] = sag_headers
 			sag_tetra_df.set_index('contig_id', inplace=True)
@@ -444,20 +452,39 @@ def main():
 				s_out.write('\n'.join([new_header, seq]) + '\n')
 
 		# SAG subseqs kmer hashing
-		if isfile(join(save_path, sag_id + '.pkl')):
-			with open(join(save_path, sag_id + '.pkl'), 'rb') as p:
-				sag_hashes = pickle.load(p)
-				sag_hashes_set = set(sag_hashes)
-			print('[SAG+]: Unpickled %s kmer hashes' % sag_id)
-		else:
-			print('[SAG+]: Calculating kmer hashes for %s' % sag_id)
-			tmp, sag_Ls = sq.kmer_slide(sag_contigs, 24, 23)
-			sag_hashes = sq.calc_seg(sag_Ls)
-			sag_hashes.sort(reverse=True)
-			sag_hashes_set = set(sag_hashes)
-			with open(join(save_path, sag_id + '.pkl'), 'wb') as p:
-				pickle.dump(sag_hashes_set, p)
+		#if isfile(join(save_path, sag_id + '.minhash.pkl')):
+		#	with open(join(save_path, sag_id + '.minhash.pkl'), 'rb') as p:
+		#		sag_hashes = pickle.load(p)
+		#		sag_hashes_set = set(sag_hashes)
+		#	print('[SAG+]: Unpickled %s kmer hashes' % sag_id)
+		#else:
+		#	print('[SAG+]: Calculating kmer hashes for %s' % sag_id)
+		#	tmp, sag_Ls = sq.kmer_slide(sag_contigs, 24, 23)
+		#	sag_hashes = sq.calc_seg(sag_Ls)
+		#	sag_hashes.sort(reverse=True)
+		#	sag_hashes_set = set(sag_hashes)
+		#	with open(join(save_path, sag_id + '.minhash.pkl'), 'wb') as p:
+		#		pickle.dump(sag_hashes_set, p)
 		
+
+		# Calculate MinHash for SAG subseqs
+		if isfile(join(save_path, sag_id + '.minhash.pkl')): 
+			with open(join(save_path, sag_id + '.minhash.pkl'), 'rb') as p:
+				sag_minhash_list = pickle.load(p)
+			print('[SAG+]: Unpickled %s MinHash' % sag_id)
+		else:
+			print('[SAG+]: Building MinHash for %s' % sag_id)
+			sag_minhash_list = []
+			for tup in sag_sub_tup:
+				tmp, sag_kmers = sq.kmer_slide([tup], 24, 23)
+				sag_minhash = MinHash(num_perm=128)
+				sag_set = set(sag_kmers)
+				for kmer in sag_set:
+					sag_minhash.update(kmer.encode('utf8'))
+				sag_minhash_list.append(sag_minhash)
+			with open(join(save_path, sag_id + '.minhash.pkl'), 'wb') as p:
+				pickle.dump(sag_minhash_list, p)
+
 		# MG Tetras
 		mg_basename = basename(mg_file)
 		mg_id = mg_basename.split('.')[0]
@@ -470,6 +497,7 @@ def main():
 			mg_headers, mg_subs = sq.kmer_slide(mg_contigs,	max_contig_len,
 												overlap_len
 												)
+			mg_sub_tup = zip(mg_headers, mg_subs)
 			print('[SAG+]: Found %s MetaG tetranucleotide tsv file' % mg_id)
 		else:
 			print('[SAG+]: Calculating tetramer frequencies for %s' % mg_id)
@@ -478,22 +506,50 @@ def main():
 			mg_headers, mg_subs = sq.kmer_slide(mg_contigs, max_contig_len,
 												overlap_len
 												)
+			mg_sub_tup = zip(mg_headers, mg_subs)
 			mg_tetra_df = pd.DataFrame.from_dict(sq.tetra_cnt(mg_subs))
 			mg_tetra_df['contig_id'] = mg_headers
 			mg_tetra_df.set_index('contig_id', inplace=True)
 			mg_tetra_df.to_csv(join(save_path, mg_id + '.tsv'), sep='\t')
 
 		# MG subseqs kmer hash, compare to SAG hashes
-		if isfile(join(save_path, sag_id + '.kmer_recruit.pkl')): 
-			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'rb') as p:
-				pass_list = pickle.load(p)
-			print('[SAG+]: Unpickled %s kmer ID filter' % sag_id)
+		#if isfile(join(save_path, sag_id + '.kmer_recruit.pkl')): 
+		#	with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'rb') as p:
+		#		pass_list = pickle.load(p)
+		#	print('[SAG+]: Unpickled %s kmer ID filter' % sag_id)
+		#else:
+		#	print('[SAG+]: Performing kmer ID filtering')
+		#	pass_list = sq.kmer_ID_filter(seq_headers=mg_headers, contig_subseqs=mg_subs,
+		#									comp_hash_set=sag_hashes_set, kmer_L=24)
+		#	with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
+		#		pickle.dump(pass_list, p)
+
+		# Calculate MinHash for MG subseqs
+		if isfile(join(save_path, mg_id + '.lsh.pkl')): 
+			with open(join(save_path, mg_id + '.lsh.pkl'), 'rb') as p:
+				lsh = pickle.load(p)
+			print('[SAG+]: Unpickled %s LSH' % mg_id)
 		else:
-			print('[SAG+]: Performing kmer ID filtering')
-			pass_list = sq.kmer_ID_filter(seq_headers=mg_headers, contig_subseqs=mg_subs,
-											comp_hash_set=sag_hashes_set, kmer_L=24)
-			with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
-				pickle.dump(pass_list, p)
+			print('[SAG+]: Building LSH for %s' % mg_id)
+			lsh = MinHashLSH(threshold=0.25, num_perm=128)
+			for tup in mg_sub_tup:
+				tmp, mg_kmers = sq.kmer_slide([tup], 24, 23)
+				mg_minhash = MinHash(num_perm=128)
+				mg_set = set(mg_kmers)
+				for kmer in mg_set:			
+					mg_minhash.update(kmer.encode('utf8'))
+				lsh.insert(tup[0], mg_minhash)
+			with open(join(save_path, mg_id + '.lsh.pkl'), 'wb') as p:
+				pickle.dump(lsh, p)
+
+		print('[SAG+]: Comparing Metagenome MinHash LSH to SAG MinHashes')
+		for sag_minH in sag_minhash_list:
+			result = lsh.query(sag_minH)
+			print("Approximate neighbours with Jaccard similarity > 0.25", result)
+
+		
+		sys.exit()
+
 
 		# Map genome id and contig id to taxid for error analysis
 		contig_taxmap_df = pd.read_csv(contig_tax_map, sep='\t', header=0)
@@ -626,7 +682,7 @@ def main():
 		error_dict['htf_errors'] = mg_htf_errors
 
 		# Coverage depth filter
-		sag_abund_df = pd.read_csv(sag_abund_file, sep='\t', header=0)
+		sag_abund_df = pd.read_csv(sag_abund_file, sep=',', header=0)
 		sag_abund_col_list = []
 		sag_var_col_list = []
 		for col in sag_abund_df.columns:
@@ -639,7 +695,7 @@ def main():
 		sag_lower_bound = sag_ave_abund - sag_ave_var
 		sag_upper_bound = sag_ave_abund + sag_ave_var
 		# Error analysis with coverage depth filter (cdf)
-		mg_abund_df = pd.read_csv(mg_abund_file, sep='\t', header=0)
+		mg_abund_df = pd.read_csv(mg_abund_file, sep=',', header=0)
 		mg_abund_col_list = []
 		mg_var_col_list = []
 		for col in mg_abund_df.columns:
@@ -807,6 +863,16 @@ def main():
 	### Used for seq tracking and error analysis
 	final_err_df = pd.concat(error_df_list)
 	final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
+
+	# build box plot of error analysis stats
+	sns.set_context("paper")
+	ax = sns.catplot( x="statistic", y="score", hue='filter_type',
+							kind='box', data=final_err_df, aspect=2
+							)
+	plt.title('SAG-plus CAMI-1-Low error analysis')
+	ax._legend.set_title('Filter Type')
+	plt.savefig(join(save_path,'error_plot2.svg'), bbox_inches='tight')
+	plt.clf()
 	### END
 
 if __name__ == "__main__":
