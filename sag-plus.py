@@ -531,7 +531,7 @@ def main():
 			print('[SAG+]: Unpickled %s LSH' % mg_id)
 		else:
 			print('[SAG+]: Building LSH for %s' % mg_id)
-			lsh = MinHashLSH(threshold=0.25, num_perm=128)
+			lsh = MinHashLSH(threshold=0.90, num_perm=128)
 			for tup in mg_sub_tup:
 				tmp, mg_kmers = sq.kmer_slide([tup], 24, 23)
 				mg_minhash = MinHash(num_perm=128)
@@ -543,13 +543,11 @@ def main():
 				pickle.dump(lsh, p)
 
 		print('[SAG+]: Comparing Metagenome MinHash LSH to SAG MinHashes')
+		pass_list = []
 		for sag_minH in sag_minhash_list:
 			result = lsh.query(sag_minH)
-			print("Approximate neighbours with Jaccard similarity > 0.25", result)
-
-		
-		sys.exit()
-
+			#print("Approximate neighbours with Jaccard similarity > 0.90", result)
+			pass_list.extend(result)
 
 		# Map genome id and contig id to taxid for error analysis
 		contig_taxmap_df = pd.read_csv(contig_tax_map, sep='\t', header=0)
