@@ -318,22 +318,40 @@ def calc_err(df):
 			TN = 0
 		
 		rows_list = []
-		filter_type = col.split('_')[0]
-		rows_list.append([filter_type, 'TruePos', TP])
-		rows_list.append([filter_type, 'FalsePos', FP])
-		rows_list.append([filter_type, 'FalseNeg', FN])
-		rows_list.append([filter_type, 'TrueNeg', TN])
-		precision = TP / (TP + FP)
+		filter_type = col
+		#rows_list.append([filter_type, 'TruePos', TP])
+		#rows_list.append([filter_type, 'FalsePos', FP])
+		#rows_list.append([filter_type, 'FalseNeg', FN])
+		#rows_list.append([filter_type, 'TrueNeg', TN])
+		try:
+			precision = TP / (TP + FP)
+		except:
+			precision = np.nan
 		rows_list.append([filter_type, 'precision', precision])
-		sensitivity = TP / (TP + FN)
+		try:
+			sensitivity = TP / (TP + FN)
+		except:
+			sensitivity = np.nan
 		rows_list.append([filter_type, 'sensitivity', sensitivity])
-		specificity = TN / (TN + FP)
+		try:
+			specificity = TN / (TN + FP)
+		except:
+			specificity = np.nan
 		rows_list.append([filter_type, 'specificity', specificity])
-		type1_error = FP / (FP + TN)
+		try:
+			type1_error = FP / (FP + TN)
+		except:
+			type1_error = np.nan
 		rows_list.append([filter_type, 'type1_error', type1_error])
-		type2_error = FN / (FN + TP)
+		try:
+			type2_error = FN / (FN + TP)
+		except:
+			type2_error = np.nan
 		rows_list.append([filter_type, 'type2_error', type2_error])
-		F1_score = 2 * ((precision * sensitivity) / (precision + sensitivity))
+		try:
+			F1_score = 2 * ((precision * sensitivity) / (precision + sensitivity))
+		except:
+			F1_score = np.nan
 		rows_list.append([filter_type, 'F1_score', F1_score])
 
 		err_df_list.extend(rows_list)
@@ -525,7 +543,7 @@ def main():
 			print('[SAG+]: Unpickled %s LSH' % mg_id)
 		else:
 			print('[SAG+]: Building LSH for %s' % mg_id)
-			lsh = MinHashLSH(threshold=0.09, num_perm=128)
+			lsh = MinHashLSH(threshold=0.25, num_perm=128)
 			for tup in mg_sub_tup:
 				tmp, mg_kmers = sq.kmer_slide([tup], 24, 23)
 				mg_minhash = MinHash(num_perm=128)
@@ -844,7 +862,7 @@ def main():
 		error_dict['thf_errors'] = mg_thf_errors
 
 		# build error type df for paired filters
-		paired_filter_list = list(itertools.combinations(error_dict.keys, 2))
+		paired_filter_list = list(itertools.combinations(error_dict.keys(), 2))
 		for paired_filter in paired_filter_list:
 			paired_error_list = []	
 			for e1, e2 in zip(error_dict[paired_filter[0]], error_dict[paired_filter[1]]):
@@ -853,7 +871,7 @@ def main():
 				else:
 					neg_anno = [x for x in [e1, e2] if 'Neg' in x][0]
 					paired_error_list.append(neg_anno)
-			error_dict['_'.join(paired_list)] = paired_error_list
+			error_dict['_'.join([paired_filter[0], paired_filter[1]])] = paired_error_list
 		print('[SAG+]: Building error type dataframe')
 		all_isSAG_df = pd.DataFrame(error_dict, index=mg_umap_df.index)
 		print(all_isSAG_df.head())
