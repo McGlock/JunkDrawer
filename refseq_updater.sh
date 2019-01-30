@@ -4,7 +4,7 @@
 function join_by { local d=$1; shift; echo -n "$1"; shift; printf "%s" "${@/#/$d}"; }
 
 # start script
-workdir=/mnt/nfs/sharknado/LimsData/Hallam_Databases/raw/Protein/refseq
+workdir=$1
 
 mkdir -p $workdir
 db_list=( archaea bacteria fungi mitochondrion plasmid plastid protozoa viral )
