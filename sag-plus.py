@@ -18,6 +18,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import adjusted_rand_score, adjusted_mutual_info_score
 import sklearn.cluster as cluster
 from sklearn.mixture import GaussianMixture as GMM
+from sklearn.mixture import BayesianGaussianMixture as BayGMM
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import LeaveOneOut
 from sklearn.neighbors import KernelDensity
@@ -398,7 +399,7 @@ def main():
 	save_path = sys.argv[6]
 	contig_tax_map = sys.argv[7]
 	sag_tax_map = sys.argv[8]
-	num_components = 3 # int(sys.argv[8])
+	num_components = 20 # int(sys.argv[8])
 
 	sq = sagtools.SeqMan()
 
@@ -613,42 +614,52 @@ def main():
 										columns=concat_tetra_df.columns,
 										index=concat_tetra_df.index
 										)
+		sag_normed_tetra_df = normed_tetra_df[normed_tetra_df.index.isin(sag_tetra_df.index)]
+		mg_normed_tetra_df = normed_tetra_df[normed_tetra_df.index.isin(mg_tetra_df.index)]
+
 		sag_tetra_df['data_type'] = ['SAG' for x in sag_tetra_df.index]
 		mg_tetra_df['data_type'] = ['MG' for x in mg_tetra_df.index]
 		### END
 
 		# UMAP for Dimension reduction of tetras
-		features = normed_tetra_df.values
-		targets = normed_tetra_df.index.values
-		targets_ints = [x[0] for x in enumerate(targets, start=0)]
+		sag_features = sag_normed_tetra_df.values
+		sag_targets = sag_normed_tetra_df.index.values
+		mg_features = mg_normed_tetra_df.values
+		mg_targets = mg_normed_tetra_df.index.values
+		normed_features = normed_tetra_df.values
+		normed_targets = normed_tetra_df.index.values
+
+		#targets_ints = [x[0] for x in enumerate(targets, start=0)]
 
 		print('[SAG+]: Dimension reduction with UMAP')
-		fit = umap.UMAP(n_neighbors=30, min_dist=0.0,
+		umap_trans = umap.UMAP(n_neighbors=30, min_dist=0.0, # TODO: mess with n_neighbors
 						n_components=num_components, metric='manhattan',
 						random_state=42
-						)
-		data = fit.fit_transform(features)
+						).fit_transform(normed_features)
+
 		pc_col_names = ['pc' + str(x) for x in range(1, num_components + 1)]
-		umap_df = pd.DataFrame(data, columns=pc_col_names, index=targets)
-		
+		umap_df = pd.DataFrame(umap_trans, columns=pc_col_names, index=normed_targets)
+		#print('[SAG+]: Transforming metagenome data with UMAP')
+		#mg_umap_tranform = sag_umap_train.transform(mg_features)
+
 		# build SAG GMM for H0 test filter (htf)
 		print('[SAG+]: Calculating AIC/BIC')
 		sag_umap_df = umap_df.loc[umap_df.index.isin(sag_tetra_df.index)]
 		mg_umap_df = umap_df.loc[umap_df.index.isin(mg_tetra_df.index)]
-		n_components = np.arange(1, 100, 1)
-		models = [GMM(n, covariance_type='tied', random_state=42)
+		n_components = np.arange(1, 136, 1)
+		models = [GMM(n, random_state=42)
 			  for n in n_components]
 		bics = []
 		aics = []
 		for i, model in enumerate(models):  # TODO: need a better way to pic GMM comps
 			n_comp = n_components[i]
 			try:
-				bic = model.fit(sag_umap_df.values).bic(sag_umap_df.values)
+				bic = model.fit(sag_umap_df.values, sag_umap_df.index).bic(sag_umap_df.values)
 				bics.append(bic)
 			except:
 				print('[WARNING]: BIC failed with %s components' % n_comp)
 			try:
-				aic = model.fit(sag_umap_df.values).aic(sag_umap_df.values)
+				aic = model.fit(sag_umap_df.values, sag_umap_df.index).aic(sag_umap_df.values)
 				aics.append(aic)
 			except:
 				print('[WARNING]: AIC failed with %s components' % n_comp)
@@ -658,33 +669,48 @@ def main():
 		print('[SAG+]: Min AIC/BIC at %s/%s, respectively' % (min_aic_comp, min_bic_comp))
 		print('[SAG+]: Using AIC as guide for GMM components')
 		print('[SAG+]: Training GMM on SAG tetras')
-		gmm = GMM(n_components=min_aic_comp, covariance_type='tied',
-					random_state=42).fit(sag_umap_df.values)
+		gmm = BayGMM(n_components=min_bic_comp, random_state=42
+						).fit(sag_umap_df.values, sag_umap_df.index
+						)
+		print('[SAG+]: Converged: ', gmm.converged_) # Check if the model has converged
 		sag_scores = gmm.score_samples(sag_umap_df.values)
-		sag_scores_df = pd.DataFrame(data=sag_scores, index=sag_umap_df.index)
+		sag_scores_df = pd.DataFrame(data=sag_scores, index=sag_targets)
 		sag_score_min = min(sag_scores_df.values)[0]
 		sag_score_max = max(sag_scores_df.values)[0]
 		mg_scores = gmm.score_samples(mg_umap_df.values)
-		mg_scores_df = pd.DataFrame(data=mg_scores, index=mg_umap_df.index)
-		#mg_score_min = min(mg_scores_df.values)[0]
-		#mg_score_max = max(mg_scores_df.values)[0]
+		mg_scores_df = pd.DataFrame(data=mg_scores, index=mg_targets)
+		#mg_pred = gmm.predict_proba(mg_umap_df.values)
+		#mg_probs_df = pd.DataFrame(data=mg_pred, index=mg_umap_df.index)
+		print(sag_scores_df.head())
+		print(mg_scores_df.head())
+		print(sag_score_min, sag_score_max)
+
+		gmm_keep_dict = {x.rsplit('_', 1)[0]:[] for x in mg_scores_df.index}
+		for index, row in mg_scores_df.iterrows():
+			score = row[0]
+			contig_header = index.rsplit('_', 1)[0]
+			if (sag_score_min <= score <= sag_score_max):
+				gmm_keep_dict[contig_header].append(True)
+			else:
+				gmm_keep_dict[contig_header].append(False)
+
 		mg_htf_errors = []
 		for index, row in mg_scores_df.iterrows():
 			score = row[0]
 			contig_header = index.rsplit('_', 1)[0] #.rsplit('|', 1)[0]
-			if ((sag_score_min <= score <= sag_score_max) and
+			if ((False not in gmm_keep_dict[contig_header]) and
 					(contig2taxid[contig_header] == sag_taxid)
 					):
 				mg_htf_errors.append('TruePos')
-			elif ((sag_score_min <= score <= sag_score_max) and
+			elif ((False not in gmm_keep_dict[contig_header]) and
 					(contig2taxid[contig_header] != sag_taxid)
 					):
 				mg_htf_errors.append('FalsePos')
-			elif (((sag_score_min > score) or (score > sag_score_max)) and
+			elif ((False in gmm_keep_dict[contig_header]) and
 					(contig2taxid[contig_header] == sag_taxid)
 					):
 				mg_htf_errors.append('FalseNeg')
-			elif (((sag_score_min > score) or (score > sag_score_max)) and
+			elif ((False in gmm_keep_dict[contig_header]) and
 					(contig2taxid[contig_header] != sag_taxid)
 					):
 				mg_htf_errors.append('TrueNeg')
@@ -792,7 +818,7 @@ def main():
 		################################################################################################
 		# Above is work in progress...                                                                 #
 		################################################################################################
-
+		'''
 		# Correlation PC filter, also tetramer Hz filter (thf) w/o GMM
 		isSAG_pc_dict = {}  # TODO: this is kinda redundant with htf, probs removable
 		for pc_pair in combinations(pc_col_names, 2):
@@ -860,7 +886,7 @@ def main():
 				):
 				mg_thf_errors.append('TrueNeg')
 		error_dict['thf_errors'] = mg_thf_errors
-
+		'''
 		# build error type df for paired filters
 		paired_filter_list = list(itertools.combinations(error_dict.keys(), 2))
 		for paired_filter in paired_filter_list:
@@ -873,8 +899,7 @@ def main():
 					paired_error_list.append(neg_anno)
 			error_dict['_'.join([paired_filter[0], paired_filter[1]])] = paired_error_list
 		print('[SAG+]: Building error type dataframe')
-		all_isSAG_df = pd.DataFrame(error_dict, index=mg_umap_df.index)
-		print(all_isSAG_df.head())
+		all_isSAG_df = pd.DataFrame(error_dict, index=mg_targets)
 		error_df = calc_err(all_isSAG_df)
 		error_df['sag_id'] = sag_id
 		error_df.set_index('sag_id', inplace=True)
@@ -906,7 +931,7 @@ def main():
 						fasta_out.write('\n'.join([new_header, seq]) + '\n')
 			print('[SAG+]: Predicted subcontigs saved to %s' % basename(fasta_out_file))
 		# get subcontigs predicted as SAG+ with paired filter types
-		paired_filter_list = list(itertools.combinations(all_isSAG_df.columns, 2))
+		paired_filter_list = list(set(itertools.combinations(all_isSAG_df.columns, 2)))
 		for paired_filter in paired_filter_list:
 			SAG_pred_list = []
 			paired_list = list(paired_filter)
