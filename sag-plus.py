@@ -734,6 +734,12 @@ def main():
 												]
 		sag_rpkm_trim_df.set_index('Sequence_name', inplace=True)
 		
+		sag_rpkm_trim_df['mean'] = sag_rpkm_trim_df.mean(axis=1)
+		sag_rpkm_trim_df['std'] = sag_rpkm_trim_df.std(axis=1)
+		sag_rpkm_trim_df['var'] = sag_rpkm_trim_df.var(axis=1)
+		sag_rpkm_trim_df['min'] = sag_rpkm_trim_df['mean'] - sag_rpkm_trim_df['std']
+		sag_rpkm_trim_df['max'] = sag_rpkm_trim_df['mean'] + sag_rpkm_trim_df['std']
+
 		mg_rpkm_df = pd.read_csv(mg_rpkm_file, sep='\t', header=0)
 		mg_rpkm_col_list = ['Sequence_name']
 		for col in mg_rpkm_df.columns:
@@ -745,18 +751,23 @@ def main():
 												]
 		mg_rpkm_trim_df.set_index('Sequence_name', inplace=True)
 
-		sag_rpkm_mean = sag_rpkm_trim_df.stack().mean()
-		sag_rpkm_std = sag_rpkm_trim_df.stack().std()
-		sag_rpkm_var = sag_rpkm_trim_df.stack().var()
+		mg_rpkm_trim_df['mean'] = mg_rpkm_trim_df.mean(axis=1)
+		mg_rpkm_trim_df['std'] = mg_rpkm_trim_df.std(axis=1)
+		mg_rpkm_trim_df['var'] = mg_rpkm_trim_df.var(axis=1)
+		mg_rpkm_trim_df['min'] = mg_rpkm_trim_df['mean'] - mg_rpkm_trim_df['std']
+		mg_rpkm_trim_df['max'] = mg_rpkm_trim_df['mean'] + mg_rpkm_trim_df['std']
 
 		var_rpkm_keep_dict = {}
-		for index, row in mg_rpkm_trim_df.iterrows():
-			mg_sag_mean_diff = abs(row.mean() - sag_rpkm_mean)
-			contig_header = index.rsplit('_', 1)[0]
-			if (mg_sag_mean_diff <= sag_rpkm_std):
-				var_rpkm_keep_dict[contig_header] = True
-			else:
-				var_rpkm_keep_dict[contig_header] = False
+		for s_index, s_row in sag_rpkm_trim_df.iterrows():
+			sag_min = s_row['min'].values[0]
+			sag_max = s_row['max'].values[0]
+			for m_index, m_row in mg_rpkm_trim_df.iterrows():
+				mg_mean = m_row['mean'].values[0]
+				contig_header = index.rsplit('_', 1)[0]
+				if (sag_min <= mg_mean <= sag_max):
+					var_rpkm_keep_dict[contig_header] = True
+				else:
+					var_rpkm_keep_dict[contig_header] = False
 
 		mg_cdf_errors = []
 		for index in mg_targets:
