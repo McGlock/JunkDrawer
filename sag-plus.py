@@ -392,14 +392,13 @@ def kmer_ID_filter(mg_headers, mg_subs, sag_hashes_set):
 def main():
 	sag_path = sys.argv[1]
 	mg_file = sys.argv[2]
-	sag_rpkm_file = sys.argv[3]
-	mg_rpkm_file = sys.argv[4]
-	max_contig_len = int(sys.argv[5])
-	overlap_len = int(sys.argv[6])
-	save_path = sys.argv[7]
-	contig_tax_map = sys.argv[8]
-	sag_tax_map = sys.argv[9]
-	num_components = 20 # int(sys.argv[8])
+	mg_rpkm_file = sys.argv[3]
+	max_contig_len = int(sys.argv[4])
+	overlap_len = int(sys.argv[5])
+	save_path = sys.argv[6]
+	contig_tax_map = sys.argv[7]
+	sag_tax_map = sys.argv[8]
+	num_components = 20 # int(sys.argv[9])
 
 	sq = sagtools.SeqMan()
 
@@ -608,17 +607,88 @@ def main():
 				mg_idf_errors.append('TrueNeg')
 		
 		error_dict['idf_errors'] = mg_idf_errors
-		concat_tetra_df = pd.concat([sag_tetra_df, mg_tetra_df])
+
+		################################################################################################
+		# Below is work in progress...                                                                 #
+		################################################################################################
+		# Coverage depth filter
+
+		mg_rpkm_df = pd.read_csv(mg_rpkm_file, sep='\t', header=0)
+		mg_rpkm_col_list = ['Sequence_name']
+		for col in mg_rpkm_df.columns:
+			if 'RPKM' in col:
+				mg_rpkm_col_list.append(col)
+		mg_rpkm_trim_df = mg_rpkm_df[mg_rpkm_col_list]
+		mg_rpkm_trim_df = mg_rpkm_trim_df.loc[mg_rpkm_trim_df['Sequence_name']
+												!= 'UNMAPPED'
+												]
+		mg_rpkm_trim_df.set_index('Sequence_name', inplace=True)
+
+		mg_rpkm_trim_df['mean'] = mg_rpkm_trim_df.mean(axis=1)
+		mg_rpkm_trim_df['std'] = mg_rpkm_trim_df.std(axis=1)
+		mg_rpkm_trim_df['var'] = mg_rpkm_trim_df.var(axis=1)
+		mg_rpkm_trim_df['min'] = mg_rpkm_trim_df['mean'] - mg_rpkm_trim_df['var']
+		mg_rpkm_trim_df['max'] = mg_rpkm_trim_df['mean'] + mg_rpkm_trim_df['var']
+
+		# get MinHash "passed" mg rpkms
+		mg_rpkm_pass_df = mg_rpkm_trim_df[mg_rpkm_trim_df.index.isin(contig_pass_list)]
+
+		# use the "passed" mg as reference to recruit more
+		var_rpkm_keep_dict = {}
+		for p_index, p_row in mg_rpkm_pass_df.iterrows():
+			pass_mean = p_row['mean']
+			pass_min = p_row['min']
+			pass_max = p_row['max']
+			for m_index, m_row in mg_rpkm_trim_df.iterrows():
+				mg_mean = m_row['mean']
+				mg_min = m_row['min']
+				mg_max = m_row['max']
+				contig_header = m_index
+				if (pass_min <= mg_mean <= pass_max):
+					#and	(mg_min <= pass_mean <= mg_max)):
+					var_rpkm_keep_dict[contig_header] = True
+				else:
+					var_rpkm_keep_dict[contig_header] = False
+
+		mg_cdf_errors = []
+		for index in mg_tetra_df.index:
+			contig_header = index.rsplit('_', 1)[0]
+			var_pass = var_rpkm_keep_dict[contig_header]
+			if ((var_pass == True) and
+					(contig2taxid[contig_header] == sag_taxid)
+					):
+				mg_cdf_errors.append('TruePos')
+			elif ((var_pass == True) and
+					(contig2taxid[contig_header] != sag_taxid)
+					):
+				mg_cdf_errors.append('FalsePos')
+			elif ((var_pass == False) and
+					(contig2taxid[contig_header] == sag_taxid)
+					):
+				mg_cdf_errors.append('FalseNeg')
+			elif ((var_pass == False) and
+					(contig2taxid[contig_header] != sag_taxid)
+					):
+				mg_cdf_errors.append('TrueNeg')
+		error_dict['cdf_errors'] = mg_cdf_errors
+		cdf_bools = pd.Series([True if 'Pos' in x else False for x in mg_cdf_errors
+								], name='bools'
+								)
+		### END
+		
+
+		# Combine the tetra data after trimming mg data using the CDF output
+		cdf_mg_tetra_df = mg_tetra_df[cdf_bools.values]
+		concat_tetra_df = pd.concat([sag_tetra_df, cdf_mg_tetra_df])
 		normed_tetra_df = pd.DataFrame(normalize(concat_tetra_df.values),
 										columns=concat_tetra_df.columns,
 										index=concat_tetra_df.index
 										)
 		sag_normed_tetra_df = normed_tetra_df[normed_tetra_df.index.isin(sag_tetra_df.index)]
-		mg_normed_tetra_df = normed_tetra_df[normed_tetra_df.index.isin(mg_tetra_df.index)]
+		mg_normed_tetra_df = normed_tetra_df[normed_tetra_df.index.isin(cdf_mg_tetra_df.index)]
 
 		sag_tetra_df['data_type'] = ['SAG' for x in sag_tetra_df.index]
-		mg_tetra_df['data_type'] = ['MG' for x in mg_tetra_df.index]
-		### END
+		cdf_mg_tetra_df['data_type'] = ['MG' for x in cdf_mg_tetra_df.index]
 
 		# UMAP for Dimension reduction of tetras
 		sag_features = sag_normed_tetra_df.values
@@ -644,7 +714,7 @@ def main():
 		# build SAG GMM for H0 test filter (htf)
 		print('[SAG+]: Calculating AIC/BIC')
 		sag_umap_df = umap_df.loc[umap_df.index.isin(sag_tetra_df.index)]
-		mg_umap_df = umap_df.loc[umap_df.index.isin(mg_tetra_df.index)]
+		mg_umap_df = umap_df.loc[umap_df.index.isin(cdf_mg_tetra_df.index)]
 		n_components = np.arange(1, 100, 1)
 		models = [GMM(n, random_state=42)
 			  for n in n_components]
@@ -680,9 +750,6 @@ def main():
 		mg_scores_df = pd.DataFrame(data=mg_scores, index=mg_targets)
 		#mg_pred = gmm.predict_proba(mg_umap_df.values)
 		#mg_probs_df = pd.DataFrame(data=mg_pred, index=mg_umap_df.index)
-		print(sag_scores_df.head())
-		print(mg_scores_df.head())
-		print(sag_score_min, sag_score_max)
 
 		gmm_keep_dict = {x.rsplit('_', 1)[0]:[] for x in mg_scores_df.index}
 		for index, row in mg_scores_df.iterrows():
@@ -693,367 +760,37 @@ def main():
 			else:
 				gmm_keep_dict[contig_header].append(False)
 
-		mg_htf_errors = []
-		for index, row in mg_scores_df.iterrows():
-			score = row[0]
-			contig_header = index.rsplit('_', 1)[0]
-			gmm_pass_list = gmm_keep_dict[contig_header]
-			pass_percent = (gmm_pass_list.count(True)/len(gmm_pass_list))
-			percent_thresh = 0.75
-			if ((pass_percent >= percent_thresh) and
-					(contig2taxid[contig_header] == sag_taxid)
-					):
-				mg_htf_errors.append('TruePos')
-			elif ((pass_percent >= percent_thresh) and
-					(contig2taxid[contig_header] != sag_taxid)
-					):
-				mg_htf_errors.append('FalsePos')
-			elif ((pass_percent < percent_thresh) and
-					(contig2taxid[contig_header] == sag_taxid)
-					):
-				mg_htf_errors.append('FalseNeg')
-			elif ((pass_percent < percent_thresh) and
-					(contig2taxid[contig_header] != sag_taxid)
-					):
-				mg_htf_errors.append('TrueNeg')
+		mg_htf_errors = mg_cdf_errors.copy()
+		#for index, row in mg_scores_df.iterrows():
+		for index in mg_tetra_df.index:
+			if index in mg_scores_df.index:
+				row = mg_scores_df.loc[index]
+				score = row[0]
+				contig_header = index.rsplit('_', 1)[0]
+				gmm_pass_list = gmm_keep_dict[contig_header]
+				pass_percent = (gmm_pass_list.count(True)/len(gmm_pass_list))
+				percent_thresh = 0.30
+				if ((pass_percent >= percent_thresh) and
+						(contig2taxid[contig_header] == sag_taxid)
+						):
+					mg_htf_errors[mg_tetra_df.index.get_loc(index)] = 'TruePos'
+				elif ((pass_percent >= percent_thresh) and
+						(contig2taxid[contig_header] != sag_taxid)
+						):
+					mg_htf_errors[mg_tetra_df.index.get_loc(index)] = 'FalsePos'
+				elif ((pass_percent < percent_thresh) and
+						(contig2taxid[contig_header] == sag_taxid)
+						):
+					mg_htf_errors[mg_tetra_df.index.get_loc(index)] = 'FalseNeg'
+				elif ((pass_percent < percent_thresh) and
+						(contig2taxid[contig_header] != sag_taxid)
+						):
+					mg_htf_errors[mg_tetra_df.index.get_loc(index)] = 'TrueNeg'
 
 		error_dict['htf_errors'] = mg_htf_errors
-		
-		################################################################################################
-		# Below is work in progress...                                                                 #
-		################################################################################################
-		# Coverage depth filter
-		sag_rpkm_df = pd.read_csv(sag_rpkm_file, sep='\t', header=0)
-		sag_rpkm_col_list = ['Sequence_name']
-		for col in sag_rpkm_df.columns:
-			if 'RPKM' in col:
-				sag_rpkm_col_list.append(col)
-		sag_rpkm_trim_df = sag_rpkm_df[sag_rpkm_col_list]
-		sag_rpkm_trim_df = sag_rpkm_trim_df.loc[sag_rpkm_trim_df['Sequence_name']
-												!= 'UNMAPPED'
-												]
-		sag_rpkm_trim_df.set_index('Sequence_name', inplace=True)
-		
-		sag_rpkm_trim_df['mean'] = sag_rpkm_trim_df.mean(axis=1)
-		sag_rpkm_trim_df['std'] = sag_rpkm_trim_df.std(axis=1)
-		sag_rpkm_trim_df['var'] = sag_rpkm_trim_df.var(axis=1)
-		sag_rpkm_trim_df['min'] = sag_rpkm_trim_df['mean'] - sag_rpkm_trim_df['std']
-		sag_rpkm_trim_df['max'] = sag_rpkm_trim_df['mean'] + sag_rpkm_trim_df['std']
 
-		mg_rpkm_df = pd.read_csv(mg_rpkm_file, sep='\t', header=0)
-		mg_rpkm_col_list = ['Sequence_name']
-		for col in mg_rpkm_df.columns:
-			if 'RPKM' in col:
-				mg_rpkm_col_list.append(col)
-		mg_rpkm_trim_df = mg_rpkm_df[mg_rpkm_col_list]
-		mg_rpkm_trim_df = mg_rpkm_trim_df.loc[mg_rpkm_trim_df['Sequence_name']
-												!= 'UNMAPPED'
-												]
-		mg_rpkm_trim_df.set_index('Sequence_name', inplace=True)
-
-		mg_rpkm_trim_df['mean'] = mg_rpkm_trim_df.mean(axis=1)
-		mg_rpkm_trim_df['std'] = mg_rpkm_trim_df.std(axis=1)
-		mg_rpkm_trim_df['var'] = mg_rpkm_trim_df.var(axis=1)
-		mg_rpkm_trim_df['min'] = mg_rpkm_trim_df['mean'] - mg_rpkm_trim_df['std']
-		mg_rpkm_trim_df['max'] = mg_rpkm_trim_df['mean'] + mg_rpkm_trim_df['std']
-
-		var_rpkm_keep_dict = {}
-		for s_index, s_row in sag_rpkm_trim_df.iterrows():
-			sag_min = s_row['min'].values[0]
-			sag_max = s_row['max'].values[0]
-			for m_index, m_row in mg_rpkm_trim_df.iterrows():
-				mg_mean = m_row['mean'].values[0]
-				contig_header = index.rsplit('_', 1)[0]
-				if (sag_min <= mg_mean <= sag_max):
-					var_rpkm_keep_dict[contig_header] = True
-				else:
-					var_rpkm_keep_dict[contig_header] = False
-
-		mg_cdf_errors = []
-		for index in mg_targets:
-			contig_header = index.rsplit('_', 1)[0]
-			var_pass = var_rpkm_keep_dict[contig_header]
-			if ((var_pass == True) and
-					(contig2taxid[contig_header] == sag_taxid)
-					):
-				mg_cdf_errors.append('TruePos')
-			elif ((var_pass == True) and
-					(contig2taxid[contig_header] != sag_taxid)
-					):
-				mg_cdf_errors.append('FalsePos')
-			elif ((var_pass == False) and
-					(contig2taxid[contig_header] == sag_taxid)
-					):
-				mg_cdf_errors.append('FalseNeg')
-			elif ((var_pass == False) and
-					(contig2taxid[contig_header] != sag_taxid)
-					):
-				mg_cdf_errors.append('TrueNeg')
-
-		error_dict['cdf_errors'] = mg_cdf_errors
-
-
-		'''
-		concat_rpkm_df = pd.concat([sag_rpkm_trim_df, mg_rpkm_trim_df])
-		normed_rpkm_df = pd.DataFrame(normalize(concat_rpkm_df.values),
-										columns=concat_rpkm_df.columns,
-										index=concat_rpkm_df.index
-										)
-		sag_normed_rpkm_df = normed_rpkm_df[normed_rpkm_df.index.isin(sag_rpkm_trim_df.index)]
-		mg_normed_rpkm_df = normed_rpkm_df[normed_rpkm_df.index.isin(mg_rpkm_trim_df.index)]
-
-		sag_rpkm_trim_df['data_type'] = ['SAG' for x in sag_rpkm_trim_df.index]
-		mg_rpkm_trim_df['data_type'] = ['MG' for x in mg_rpkm_trim_df.index]
-
-		# UMAP for Dimension reduction of RPKMs
-		sag_rpkm_features = sag_normed_rpkm_df.values
-		sag_rpkm_targets = sag_normed_rpkm_df.index.values
-		mg_rpkm_features = mg_normed_rpkm_df.values
-		mg_rpkm_targets = mg_normed_rpkm_df.index.values
-		normed_rpkm_features = normed_rpkm_df.values
-		normed_rpkm_targets = normed_rpkm_df.index.values
-
-		print('[SAG+]: Dimension reduction of RPKMs with UMAP')
-		umap_rpkm_trans = umap.UMAP(n_neighbors=30, min_dist=0.0,
-						n_components= 2,  #len(normed_rpkm_df.columns),
-						metric='manhattan',	random_state=42
-						).fit_transform(normed_rpkm_features)
-
-		pc_col_rpkm_names = ['pc' + str(x) for x in
-						range(1, 3) #len(normed_rpkm_df.columns) + 1)
-						]
-		umap_rpkm_df = pd.DataFrame(umap_rpkm_trans, columns=pc_col_rpkm_names,
-								index=normed_rpkm_targets
-								)
-
-		# build SAG GMM for CDF
-		print('[SAG+]: Calculating AIC/BIC')
-		sag_umap_rpkm_df = umap_rpkm_df.loc[umap_rpkm_df.index.isin(sag_rpkm_trim_df.index)]
-		mg_umap_rpkm_df = umap_rpkm_df.loc[umap_rpkm_df.index.isin(mg_rpkm_trim_df.index)]
-		'''
-		# GMM Method
-		'''
-		n_components = np.arange(1, 100, 1)
-		models = [GMM(n, random_state=42)
-			  for n in n_components]
-		bics = []
-		aics = []
-		for i, model in enumerate(models):  # TODO: need a better way to pic GMM comps
-			n_comp = n_components[i]
-			try:
-				bic = model.fit(sag_umap_rpkm_df.values,
-					sag_umap_rpkm_df.index).bic(sag_umap_rpkm_df.values
-					)
-				bics.append(bic)
-			except:
-				print('[WARNING]: BIC failed with %s components' % n_comp)
-			try:
-				aic = model.fit(sag_umap_rpkm_df.values,
-					sag_umap_rpkm_df.index).aic(sag_umap_rpkm_df.values
-					)
-				aics.append(aic)
-			except:
-				print('[WARNING]: AIC failed with %s components' % n_comp)
-
-		min_bic_comp = n_components[bics.index(min(bics))]
-		min_aic_comp = n_components[aics.index(min(aics))]
-		print('[SAG+]: Min AIC/BIC at %s/%s, respectively' % (min_aic_comp, min_bic_comp))
-		print('[SAG+]: Using AIC as guide for GMM components')
-		print('[SAG+]: Training GMM on SAG RPKMs')
-		gmm = GMM(n_components=min_aic_comp, random_state=42
-						).fit(sag_umap_rpkm_df.values, sag_umap_rpkm_df.index
-						)
-		print('[SAG+]: Converged: ', gmm.converged_) # Check if the model has converged
-		sag_rpkm_scores = gmm.score_samples(sag_umap_rpkm_df.values)
-		sag_rpkm_scores_df = pd.DataFrame(data=sag_rpkm_scores, index=sag_rpkm_targets)
-		sag_rpkm_score_min = min(sag_rpkm_scores_df.values)[0]
-		sag_rpkm_score_max = max(sag_rpkm_scores_df.values)[0]
-		mg_rpkm_scores = gmm.score_samples(mg_umap_rpkm_df.values)
-		mg_rpkm_scores_df = pd.DataFrame(data=mg_rpkm_scores, index=mg_rpkm_targets)
-		mg_rpkm_pred = gmm.predict_proba(mg_umap_rpkm_df.values)
-		mg_rpkm_probs_df = pd.DataFrame(data=mg_rpkm_pred, index=mg_umap_rpkm_df.index)
-		print(mg_rpkm_probs_df.head())
-		print(sag_rpkm_scores_df.head())
-		print(mg_rpkm_scores_df.head())
-		print(sag_rpkm_score_min, sag_rpkm_score_max)
-
-		gmm_rpkm_keep_dict = {}
-		for index, row in mg_rpkm_scores_df.iterrows():
-			score = row[0]
-			contig_header = index.rsplit('_', 1)[0]
-			if (sag_rpkm_score_min <= score <= sag_rpkm_score_max):
-				gmm_rpkm_keep_dict[contig_header] = True
-				print(contig_header)
-			else:
-				gmm_rpkm_keep_dict[contig_header] = False
-
-		mg_cdf_errors = []
-		for index in mg_targets:
-			contig_header = index.rsplit('_', 1)[0]
-			gmm_pass = gmm_rpkm_keep_dict[contig_header]
-			if ((gmm_pass == True) and
-					(contig2taxid[contig_header] == sag_taxid)
-					):
-				mg_cdf_errors.append('TruePos')
-			elif ((gmm_pass == True) and
-					(contig2taxid[contig_header] != sag_taxid)
-					):
-				mg_cdf_errors.append('FalsePos')
-			elif ((gmm_pass == False) and
-					(contig2taxid[contig_header] == sag_taxid)
-					):
-				mg_cdf_errors.append('FalseNeg')
-			elif ((gmm_pass == False) and
-					(contig2taxid[contig_header] != sag_taxid)
-					):
-				mg_cdf_errors.append('TrueNeg')
-
-		error_dict['cdf_errors'] = mg_cdf_errors
-		'''
-		# Correlation method
-		'''
-		isSAG_pc_dict = {}
-		for pc_pair in combinations(pc_col_rpkm_names, 2):
-			pc_pair = list(pc_pair)
-			subsag_rpkm_df = sag_umap_rpkm_df[pc_pair]
-			submg_rpkm_df = mg_umap_rpkm_df[pc_pair]
-			sag_std = subsag_rpkm_df.std().values
-			sag_mean = subsag_rpkm_df.mean().values
-			sag_corr = subsag_rpkm_df.corr().values
-			### Used for seq tracking and error analysis
-			# Draw ellispe that colors by L-mer error stats
-			print('[SAG+]: Plotting clusting with kmer error stats')
-			print('[SAG+]: Including SAG correlation distribution ellispe')
-			error_file_name = '.'.join([sag_id, '_'.join(pc_pair),
-										'UMAP_Error_Ellipse', 'png'])
-			error_save_path = join(save_path, error_file_name)
-			#plot_ellispe_error(submg_rpkm_df, mg_idf_errors, error_save_path,
-			#					sag_mean, sag_corr
-			#					)
-			### END
-
-			# Draw ellispe that colors by membership
-			print('[SAG+]: Plotting clusting with subcontig membership')
-			print('[SAG+]: Including SAG correlation distribution ellispe')
-			memb_file_name = '.'.join([sag_id, '_'.join(pc_pair),
-										'UMAP_Ellipse_membership', 'png'])
-			memb_save_path = join(save_path, memb_file_name)
-			membership_df, isSAG_col = plot_ellispe_membership(submg_rpkm_df,
-																memb_save_path,
-																sag_mean, sag_corr
-																)
-			### Used for seq tracking and error analysis
-			# Look at tetramer Hz filter (thf) error types
-			isSAG_list = []
-			for index, row in membership_df.iterrows():
-				isSAG = row[isSAG_col]
-				isSAG_list.append(isSAG)
-			isSAG_pc_dict['_'.join(pc_pair)] = isSAG_list
-
-		### Used for seq tracking and error analysis
-		# Look at rpkm Hz filter (cdf) error types
-		isSAG_pc_df = pd.DataFrame(isSAG_pc_dict, index=mg_umap_rpkm_df.index)
-		isSAG_pc_df['col_sum'] = isSAG_pc_df.sum(axis=1)
-		isSAG_pc_df['isSAG'] = [1 if x == len(isSAG_pc_dict.keys())
-								else 0 for x in isSAG_pc_df['col_sum']]
-
-		isSAG_dict = dict(zip(isSAG_pc_df.index.values, isSAG_pc_df['isSAG']))
-
-		mg_cdf_errors = []
-		for index in mg_targets:
-			contig_header = index.rsplit('_', 1)[0]
-			isSAG = isSAG_dict[contig_header]
-			if ((isSAG == 1) and
-				(contig2taxid[contig_header] == sag_taxid)
-				):
-				mg_cdf_errors.append('TruePos')
-			elif ((isSAG == 1) and
-				(contig2taxid[contig_header] != sag_taxid)
-				):
-					mg_cdf_errors.append('FalsePos')
-			elif ((isSAG != 1) and
-				(contig2taxid[contig_header] == sag_taxid)
-				):
-				mg_cdf_errors.append('FalseNeg')
-			elif ((isSAG != 1) and
-				(contig2taxid[contig_header] != sag_taxid)
-				):
-				mg_cdf_errors.append('TrueNeg')
-		error_dict['cdf_errors'] = mg_cdf_errors
-		'''
-		################################################################################################
-		# Above is work in progress...                                                                 #
-		################################################################################################
-		'''
-		# Correlation PC filter, also tetramer Hz filter (thf) w/o GMM
-		isSAG_pc_dict = {}  # TODO: this is kinda redundant with htf, probs removable
-		for pc_pair in combinations(pc_col_names, 2):
-			pc_pair = list(pc_pair)
-			subset_df = umap_df[pc_pair]
-			subsag_umap_df = sag_umap_df[pc_pair]
-			submg_umap_df = mg_umap_df[pc_pair]
-			sag_std = subsag_umap_df.std().values
-			sag_mean = subsag_umap_df.mean().values
-			sag_corr = subsag_umap_df.corr().values
-			### Used for seq tracking and error analysis
-			# Draw ellispe that colors by L-mer error stats
-			print('[SAG+]: Plotting clusting with kmer error stats')
-			print('[SAG+]: Including SAG correlation distribution ellispe')
-			error_file_name = '.'.join([sag_id, '_'.join(pc_pair),
-										'UMAP_Error_Ellipse', 'png'])
-			error_save_path = join(save_path, error_file_name)
-			plot_ellispe_error(submg_umap_df, mg_idf_errors, error_save_path,
-								sag_mean, sag_corr
-								)
-			### END
-
-			# Draw ellispe that colors by membership
-			print('[SAG+]: Plotting clusting with subcontig membership')
-			print('[SAG+]: Including SAG correlation distribution ellispe')
-			memb_file_name = '.'.join([sag_id, '_'.join(pc_pair),
-										'UMAP_Ellipse_membership', 'png'])
-			memb_save_path = join(save_path, memb_file_name)
-			membership_df, isSAG_col = plot_ellispe_membership(submg_umap_df,
-																memb_save_path,
-																sag_mean, sag_corr
-																)
-			### Used for seq tracking and error analysis
-			# Look at tetramer Hz filter (thf) error types
-			isSAG_list = []
-			for index, row in membership_df.iterrows():
-				isSAG = row[isSAG_col]
-				isSAG_list.append(isSAG)
-			isSAG_pc_dict['_'.join(pc_pair)] = isSAG_list
-
-		### Used for seq tracking and error analysis
-		# Look at tetramer Hz filter (thf) error types
-		isSAG_pc_df = pd.DataFrame(isSAG_pc_dict, index=mg_umap_df.index)
-		isSAG_pc_df['col_sum'] = isSAG_pc_df.sum(axis=1)
-		isSAG_pc_df['isSAG'] = [1 if x == len(isSAG_pc_dict.keys())
-								else 0 for x in isSAG_pc_df['col_sum']]
-		mg_thf_errors = []
-		for index, row in isSAG_pc_df.iterrows():
-			isSAG = row['isSAG']
-			contig_header = index.rsplit('_', 1)[0] #.rsplit('|', 1)[0]
-			if ((isSAG == 1) and
-				(contig2taxid[contig_header] == sag_taxid)
-				):
-				mg_thf_errors.append('TruePos')
-			elif ((isSAG == 1) and
-				(contig2taxid[contig_header] != sag_taxid)
-				):
-					mg_thf_errors.append('FalsePos')
-			elif ((isSAG != 1) and
-				(contig2taxid[contig_header] == sag_taxid)
-				):
-				mg_thf_errors.append('FalseNeg')
-			elif ((isSAG != 1) and
-				(contig2taxid[contig_header] != sag_taxid)
-				):
-				mg_thf_errors.append('TrueNeg')
-		error_dict['thf_errors'] = mg_thf_errors
-		'''
 		# build error type df for paired filters
+		print('[SAG+]: Building error type dataframe')
 		paired_filter_list = list(itertools.combinations(error_dict.keys(), 2))
 		for paired_filter in paired_filter_list:
 			paired_error_list = []	
@@ -1061,82 +798,74 @@ def main():
 				if e1 == e2:
 					paired_error_list.append(e1)
 				else:
+					#print(e1, e2)
 					neg_anno = [x for x in [e1, e2] if 'Neg' in x][0]
 					paired_error_list.append(neg_anno)
 			error_dict['_'.join([paired_filter[0], paired_filter[1]])] = paired_error_list
-		print('[SAG+]: Building error type dataframe')
-		for k in error_dict.keys():
-			print(k)
-			print(len(error_dict[k]))
-		all_isSAG_df = pd.DataFrame(error_dict, index=mg_targets)
+		# combine subconfigs predicted as SAG+ with IDF and HTF+CDF
+		cdf_subcontig_list = error_dict['htf_errors']
+		idf_subcontig_list = error_dict['idf_errors']
+		combo_error_list = []	
+		for e1, e2 in zip(cdf_subcontig_list, idf_subcontig_list):
+			if e1 == e2:
+				combo_error_list.append(e1)
+			else:
+				pos_anno = [x for x in [e1, e2] if 'Pos' in x][0]
+				combo_error_list.append(pos_anno)
+		error_dict['idf_plus_htf'] = combo_error_list
+
+		all_isSAG_df = pd.DataFrame(error_dict, index=mg_tetra_df.index)
 		error_df = calc_err(all_isSAG_df)
 		error_df['sag_id'] = sag_id
 		error_df.set_index('sag_id', inplace=True)
 		error_df.to_csv(join(save_path, sag_id + '_error_stats.tsv'), sep='\t')
 		### END
 		error_df_list.append(error_df)
+
 		# get subcontigs predicted as SAG+ with each filter types
-		for filter_type in all_isSAG_df.columns:
-			SAG_pred_list = []
-			type_list = [filter_type]
-			print(filter_type)
-			paired_isSAG_df = all_isSAG_df[type_list]
-			for index, row in paired_isSAG_df.iterrows():
-				isSAG_sum = sum([1 for x in row if 'Pos' in x])
-				if isSAG_sum == len(paired_isSAG_df.columns):
-					SAG_pred_list.append(index)
-			print('[SAG+]: Predicted %s subcontigs for SAG %s using %s' % \
-					(str(len(set(SAG_pred_list))), sag_id, type_list[0]))
-			# Save Predicted SAG contigs to a fasta file
-			fasta_out_file = join(save_path,
-									'.'.join([sag_id, type_list[0],
-										'predicted_contigs.fasta']
-										))
-			with open(fasta_out_file, 'w') as fasta_out:
-				for header, seq in zip(mg_headers, mg_subs):
-					contig_id = header.rsplit('_', 1)[0] #.rsplit('|', 1)[0]
-					tax_id = contig2taxid[contig_id]
-					if header in SAG_pred_list:
-						new_header = '>' + header + '|' + str(tax_id)
-						fasta_out.write('\n'.join([new_header, seq]) + '\n')
-			print('[SAG+]: Predicted subcontigs saved to %s' % basename(fasta_out_file))
-		# get subcontigs predicted as SAG+ with paired filter types
-		#paired_filter_list = list(set(itertools.combinations(all_isSAG_df.columns, 2)))
-		for paired_filter in all_isSAG_df.columns:
-			SAG_pred_list = []
-			#paired_list = list(paired_filter)
-			#paired_isSAG_df = all_isSAG_df[paired_list]
-			paired_isSAG_df = all_isSAG_df[[paired_filter]]
-			for index, row in paired_isSAG_df.iterrows():
-				isSAG_sum = sum([1 for x in row if 'Pos' in x])
-				if isSAG_sum == len(paired_isSAG_df.columns):
-					SAG_pred_list.append(index)
-			print('[SAG+]: Predicted %s subcontigs for SAG %s using %s' % \
-					(str(len(set(SAG_pred_list))), sag_id, paired_filter))
-			# Save Predicted SAG contigs to a fasta file
-			fasta_out_file = join(save_path,
-									'.'.join([sag_id, paired_filter,
-										'predicted_contigs.fasta']
-										))
-			with open(fasta_out_file, 'w') as fasta_out:
-				for header, seq in zip(mg_headers, mg_subs):
-					contig_id = header.rsplit('_', 1)[0] #.rsplit('|', 1)[0]
-					tax_id = contig2taxid[contig_id]
-					if header in SAG_pred_list:
-						new_header = '>' + header + '|' + str(tax_id)
-						fasta_out.write('\n'.join([new_header, seq]) + '\n')
-			print('[SAG+]: Predicted subcontigs saved to %s' % basename(fasta_out_file))
-		# get subcontigs predicted as SAG+ all filters (most conservative)
+		#for filter_type in all_isSAG_df.columns:
+		# get subcontigs predicted as SAG+ with idf combined with htf
 		SAG_pred_list = []
-		for index, row in all_isSAG_df.iterrows():
+		type_list = ['idf_plus_htf']
+		print('idf_plus_htf')
+		paired_isSAG_df = all_isSAG_df[type_list]
+		for index, row in paired_isSAG_df.iterrows():
 			isSAG_sum = sum([1 for x in row if 'Pos' in x])
-			if isSAG_sum == len(all_isSAG_df.columns):
+			if isSAG_sum == len(paired_isSAG_df.columns):
 				SAG_pred_list.append(index)
-		print('[SAG+]: Predicted %s subcontigs for SAG %s' % (str(len(set(SAG_pred_list))), 
-																sag_id)
-																)
+		print('[SAG+]: Predicted %s subcontigs for SAG %s using %s' % \
+				(str(len(set(SAG_pred_list))), sag_id, type_list[0]))
 		# Save Predicted SAG contigs to a fasta file
-		fasta_out_file = join(save_path, sag_id + '.all_filters.predicted_contigs.fasta')
+		fasta_out_file = join(save_path,
+								'.'.join([sag_id, type_list[0],
+									'predicted_contigs.fasta']
+									))
+		taxa_cnt_dict = {}
+		with open(fasta_out_file, 'w') as fasta_out:
+			for header, seq in zip(mg_headers, mg_subs):
+				contig_id = header.rsplit('_', 1)[0]
+				tax_id = contig2taxid[contig_id]
+				if header in SAG_pred_list:
+					new_header = '>' + header + '|' + str(tax_id)
+					fasta_out.write('\n'.join([new_header, seq]) + '\n')
+					if tax_id in taxa_cnt_dict.keys():
+						taxa_cnt_dict[tax_id] += 1
+					else:
+						taxa_cnt_dict[tax_id] = 1
+		print('[SAG+]: Predicted subcontigs saved to %s' % basename(fasta_out_file))
+
+		# get subcontigs predicted as SAG+ all filters (most conservative)
+		#SAG_pred_list = []
+		#for index, row in all_isSAG_df.iterrows():
+		#	isSAG_sum = sum([1 for x in row if 'Pos' in x])
+		#	if isSAG_sum == len(all_isSAG_df.columns):
+		#		SAG_pred_list.append(index)
+		#print('[SAG+]: Predicted %s subcontigs for SAG %s' % (str(len(set(SAG_pred_list))), 
+		#														sag_id)
+		#														)
+		'''
+		# Save Predicted SAG contigs to a fasta file
+		fasta_out_file = join(save_path, sag_id + '.idf_plus_htf.predicted_contigs.fasta')
 		taxa_cnt_dict = {}
 		with open(fasta_out_file, 'w') as fasta_out:
 			for header, seq in zip(mg_headers, mg_subs):
@@ -1150,6 +879,7 @@ def main():
 					else:
 						taxa_cnt_dict[tax_id] = 1
 		print('[SAG+]: Predicted subcontigs saved to %s' % basename(fasta_out_file))
+		'''
 		taxa_cnt_df = pd.DataFrame.from_dict(taxa_cnt_dict, orient='index',
 												columns=['count']
 												)
