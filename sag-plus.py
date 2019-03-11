@@ -624,16 +624,37 @@ def main():
 												]
 		mg_rpkm_trim_df.set_index('Sequence_name', inplace=True)
 
+		'''
 		mg_rpkm_trim_df['mean'] = mg_rpkm_trim_df.mean(axis=1)
 		mg_rpkm_trim_df['std'] = mg_rpkm_trim_df.std(axis=1)
 		mg_rpkm_trim_df['var'] = mg_rpkm_trim_df.var(axis=1)
 		mg_rpkm_trim_df['min'] = mg_rpkm_trim_df['mean'] - mg_rpkm_trim_df['var']
 		mg_rpkm_trim_df['max'] = mg_rpkm_trim_df['mean'] + mg_rpkm_trim_df['var']
+		'''
 
 		# get MinHash "passed" mg rpkms
 		mg_rpkm_pass_df = mg_rpkm_trim_df[mg_rpkm_trim_df.index.isin(contig_pass_list)]
+		mg_rpkm_pass_stat_df = mg_rpkm_pass_df.mean().reset_index()
+		mg_rpkm_pass_stat_df.columns = ['sample_id', 'mean']
+		mg_rpkm_pass_stat_df['std'] = list(mg_rpkm_pass_df.std())
+		mg_rpkm_pass_stat_df['var'] = list(mg_rpkm_pass_df.var())
+		mg_rpkm_pass_stat_df['min'] = mg_rpkm_pass_stat_df['mean'] - mg_rpkm_pass_stat_df['std']
+		mg_rpkm_pass_stat_df['max'] = mg_rpkm_pass_stat_df['mean'] + mg_rpkm_pass_stat_df['std']
+		print(mg_rpkm_pass_stat_df.head())
 
 		# use the "passed" mg as reference to recruit more
+		std_rpkm_keep_dict = {x: [] for x in mg_rpkm_trim_df.index}
+		for index, row in mg_rpkm_trim_df.iterrows():
+			contig_header = index
+			for i, rpkm_val in enumerate(row):
+				pass_stats = mg_rpkm_pass_stat_df.iloc[[i]]
+				pass_min = pass_stats['min'].values[0]
+				pass_max = pass_stats['max'].values[0]
+				if (pass_min <= rpkm_val <= pass_max):
+					std_rpkm_keep_dict[contig_header].append(True)
+				else:
+					std_rpkm_keep_dict[contig_header].append(False)
+		'''
 		var_rpkm_keep_dict = {}
 		for p_index, p_row in mg_rpkm_pass_df.iterrows():
 			pass_mean = p_row['mean']
@@ -649,24 +670,27 @@ def main():
 					var_rpkm_keep_dict[contig_header] = True
 				else:
 					var_rpkm_keep_dict[contig_header] = False
-
+		'''
 		mg_cdf_errors = []
 		for index in mg_tetra_df.index:
 			contig_header = index.rsplit('_', 1)[0]
-			var_pass = var_rpkm_keep_dict[contig_header]
-			if ((var_pass == True) and
+			#var_pass = var_rpkm_keep_dict[contig_header]
+			std_pass_list = std_rpkm_keep_dict[contig_header]
+			pass_percent = (std_pass_list.count(True) / len(std_pass_list))
+			percent_thresh = 1.0
+			if ((pass_percent >= percent_thresh) and
 					(contig2taxid[contig_header] == sag_taxid)
 					):
 				mg_cdf_errors.append('TruePos')
-			elif ((var_pass == True) and
+			elif ((pass_percent >= percent_thresh) and
 					(contig2taxid[contig_header] != sag_taxid)
 					):
 				mg_cdf_errors.append('FalsePos')
-			elif ((var_pass == False) and
+			elif ((pass_percent < percent_thresh) and
 					(contig2taxid[contig_header] == sag_taxid)
 					):
 				mg_cdf_errors.append('FalseNeg')
-			elif ((var_pass == False) and
+			elif ((pass_percent < percent_thresh) and
 					(contig2taxid[contig_header] != sag_taxid)
 					):
 				mg_cdf_errors.append('TrueNeg')
@@ -674,6 +698,7 @@ def main():
 		cdf_bools = pd.Series([True if 'Pos' in x else False for x in mg_cdf_errors
 								], name='bools'
 								)
+		print(cdf_bools.value_counts())
 		### END
 		
 
@@ -764,12 +789,12 @@ def main():
 		#for index, row in mg_scores_df.iterrows():
 		for index in mg_tetra_df.index:
 			if index in mg_scores_df.index:
-				row = mg_scores_df.loc[index]
-				score = row[0]
+				#row = mg_scores_df.loc[index]
+				#score = row[0]
 				contig_header = index.rsplit('_', 1)[0]
 				gmm_pass_list = gmm_keep_dict[contig_header]
 				pass_percent = (gmm_pass_list.count(True)/len(gmm_pass_list))
-				percent_thresh = 0.30
+				percent_thresh = 0.01
 				if ((pass_percent >= percent_thresh) and
 						(contig2taxid[contig_header] == sag_taxid)
 						):
@@ -827,7 +852,6 @@ def main():
 		# get subcontigs predicted as SAG+ with idf combined with htf
 		SAG_pred_list = []
 		type_list = ['idf_plus_htf']
-		print('idf_plus_htf')
 		paired_isSAG_df = all_isSAG_df[type_list]
 		for index, row in paired_isSAG_df.iterrows():
 			isSAG_sum = sum([1 for x in row if 'Pos' in x])
@@ -879,10 +903,11 @@ def main():
 					else:
 						taxa_cnt_dict[tax_id] = 1
 		print('[SAG+]: Predicted subcontigs saved to %s' % basename(fasta_out_file))
-		'''
+	
 		taxa_cnt_df = pd.DataFrame.from_dict(taxa_cnt_dict, orient='index',
 												columns=['count']
 												)
+		print(taxa_cnt_df.head())
 		taxa_cnt_df['sp_name'] = [list(sag_taxmap_df.loc[sag_taxmap_df['sp_taxid'] == int(x)
 									]['sp_name'].values)[0] for x in taxa_cnt_df.index
 									]
@@ -895,10 +920,11 @@ def main():
 		taxa_cnt_df['percent_recruit'] = percent_list
 		taxa_cnt_df.sort_values(by=['count'], inplace=True, ascending=False)
 		taxa_tracking_list.append(taxa_cnt_df)
+		'''
 		print('[SAG+]: Completed analysis of %s and %s' % (sag_id, mg_id))
-
-	taxa_tracking_df = pd.concat(taxa_tracking_list)
-	taxa_tracking_df.to_csv(join(save_path, 'total_recruit_stats.tsv'), sep='\t')	
+	
+	#taxa_tracking_df = pd.concat(taxa_tracking_list)
+	#taxa_tracking_df.to_csv(join(save_path, 'total_recruit_stats.tsv'), sep='\t')	
 	### Used for seq tracking and error analysis
 	final_err_df = pd.concat(error_df_list)
 	final_err_df.to_csv(join(save_path, 'total_error_stats.tsv'), sep='\t')
