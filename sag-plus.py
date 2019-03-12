@@ -568,6 +568,9 @@ def main():
 		contig2taxid = {x[0]: x[1] for x in 
 							zip(contig_taxmap_df['@@SEQUENCEID'], contig_taxmap_df['TAXID'])
 							}
+		contig2genomeid = {x[0]: x[1] for x in zip(contig_taxmap_df['@@SEQUENCEID'],
+													contig_taxmap_df['BINID'])
+													}
 		# hack to get partial sag id from taxmap file
 		sag_key_list = [s for s in sag_taxmap_df['_CAMI_genomeID'] if s in sag_id]
 		sag_key = max(sag_key_list, key=len)
@@ -631,16 +634,24 @@ def main():
 		mg_rpkm_trim_df['min'] = mg_rpkm_trim_df['mean'] - mg_rpkm_trim_df['var']
 		mg_rpkm_trim_df['max'] = mg_rpkm_trim_df['mean'] + mg_rpkm_trim_df['var']
 		'''
-
 		# get MinHash "passed" mg rpkms
 		mg_rpkm_pass_df = mg_rpkm_trim_df[mg_rpkm_trim_df.index.isin(contig_pass_list)]
 		mg_rpkm_pass_stat_df = mg_rpkm_pass_df.mean().reset_index()
 		mg_rpkm_pass_stat_df.columns = ['sample_id', 'mean']
-		mg_rpkm_pass_stat_df['std'] = list(mg_rpkm_pass_df.std())
-		mg_rpkm_pass_stat_df['var'] = list(mg_rpkm_pass_df.var())
-		mg_rpkm_pass_stat_df['min'] = mg_rpkm_pass_stat_df['mean'] - mg_rpkm_pass_stat_df['std']
-		mg_rpkm_pass_stat_df['max'] = mg_rpkm_pass_stat_df['mean'] + mg_rpkm_pass_stat_df['std']
-		print(mg_rpkm_pass_stat_df.head())
+		mg_rpkm_pass_stat_df['std'] = mg_rpkm_pass_df.std()
+		mg_rpkm_pass_stat_df['var'] = mg_rpkm_pass_df.var()
+
+		# if there is only one contig in the dataframe, use 25% of abundance as STD
+		if mg_rpkm_pass_stat_df['std'].isnull().values.any() == True:
+			mg_rpkm_pass_stat_df['min'] = mg_rpkm_pass_stat_df['mean'] - \
+												mg_rpkm_pass_stat_df['mean']*0.25					
+			mg_rpkm_pass_stat_df['max'] = mg_rpkm_pass_stat_df['mean'] + \
+												mg_rpkm_pass_stat_df['mean']*0.25
+		else:
+			mg_rpkm_pass_stat_df['min'] = mg_rpkm_pass_stat_df['mean'] - \
+												mg_rpkm_pass_stat_df['std']
+			mg_rpkm_pass_stat_df['max'] = mg_rpkm_pass_stat_df['mean'] + \
+												mg_rpkm_pass_stat_df['std']
 
 		# use the "passed" mg as reference to recruit more
 		std_rpkm_keep_dict = {x: [] for x in mg_rpkm_trim_df.index}
@@ -698,7 +709,6 @@ def main():
 		cdf_bools = pd.Series([True if 'Pos' in x else False for x in mg_cdf_errors
 								], name='bools'
 								)
-		print(cdf_bools.value_counts())
 		### END
 		
 
@@ -794,7 +804,7 @@ def main():
 				contig_header = index.rsplit('_', 1)[0]
 				gmm_pass_list = gmm_keep_dict[contig_header]
 				pass_percent = (gmm_pass_list.count(True)/len(gmm_pass_list))
-				percent_thresh = 0.01
+				percent_thresh = 1/len(gmm_pass_list)
 				if ((pass_percent >= percent_thresh) and
 						(contig2taxid[contig_header] == sag_taxid)
 						):
