@@ -28,6 +28,7 @@ import functools
 import statistics
 from datasketch import MinHash, MinHashLSH
 import itertools
+import sourmash
 
 
 # trying cython
@@ -477,7 +478,7 @@ def main():
 		#	with open(join(save_path, sag_id + '.minhash.pkl'), 'wb') as p:
 		#		pickle.dump(sag_hashes_set, p)
 		
-
+		'''
 		# Calculate MinHash for SAG subseqs
 		if isfile(join(save_path, sag_id + '.minhash.pkl')): 
 			with open(join(save_path, sag_id + '.minhash.pkl'), 'rb') as p:
@@ -495,6 +496,22 @@ def main():
 				sag_minhash_list.append(sag_minhash)
 			with open(join(save_path, sag_id + '.minhash.pkl'), 'wb') as p:
 				pickle.dump(sag_minhash_list, p)
+		'''
+		# Calculate MinHash Signatures with SourMash for SAG subseqs
+		if isfile(join(save_path, sag_id + '.minhash.sig')): 
+			sag_sig = sourmash.signature.load_signatures(join(save_path, sag_id + \
+																'.minhash.sig')
+																)
+			print('[SAG+]: Loaded %s Signatures' % sag_id)
+		else:
+			print('[SAG+]: Building Signatures for %s' % sag_id)
+			sag_minhash = sourmash.MinHash(n=0, ksize=51, scale=1)
+			for seq in sag_subs:
+				sag_minhash.add_sequence(seq)
+			sag_sig = sourmash.SourmashSignature(sag_minhash, name=sag_id)
+			sourmash.signature.save_signatures(sag_sig,	fp=join(save_path, sag_id + \
+																	'.minhash.sig')
+																	)
 
 		# MG Tetras
 		mg_basename = basename(mg_file)
@@ -535,6 +552,7 @@ def main():
 		#	with open(join(save_path, sag_id + '.kmer_recruit.pkl'), 'wb') as p:
 		#		pickle.dump(pass_list, p)
 
+		'''
 		# Calculate MinHash for MG subseqs
 		if isfile(join(save_path, mg_id + '.lsh.pkl')): 
 			with open(join(save_path, mg_id + '.lsh.pkl'), 'rb') as p:
@@ -542,7 +560,7 @@ def main():
 			print('[SAG+]: Unpickled %s LSH' % mg_id)
 		else:
 			print('[SAG+]: Building LSH for %s' % mg_id)
-			lsh = MinHashLSH(threshold=0.25, num_perm=128)
+			lsh = MinHashLSH(threshold=0.90, num_perm=128)
 			for tup in mg_sub_tup:
 				tmp, mg_kmers = sq.kmer_slide([tup], 24, 23)
 				mg_minhash = MinHash(num_perm=128)
@@ -557,9 +575,33 @@ def main():
 		pass_list = []
 		for sag_minH in sag_minhash_list:
 			result = lsh.query(sag_minH)
-			#print("Approximate neighbours with Jaccard similarity > 0.90", result)
 			pass_list.extend(result)
+		'''
 
+		# Calculate MinHash Signatures with SourMash for MG subseqs
+		if isfile(join(save_path, mg_id + '.minhash.sig')): 
+			mg_sig_list = sourmash.signature.load_signatures(join(save_path, mg_id + \
+																'.minhash.sig')
+																)
+			print('[SAG+]: Loaded %s Signatures' % mg_id)
+		else:
+			print('[SAG+]: Building Signatures for %s' % mg_id)
+			mg_sig_list = []
+			for mg_head, seq in mg_sub_tup:
+				mg_minhash = sourmash.MinHash(n=0, ksize=51, scale=1)
+				mg_minhash.add_sequence(seq)
+				mg_sig = sourmash.SourmashSignature(mg_minhash, name=mg_head)
+				mg_sig_list.append(mg_sig)
+			sourmash.signature.save_signatures(mg_sig_list,	fp=join(save_path, mg_id + \
+																	'.minhash.sig')
+																	)
+		# Compare SAG sigs to MG sigs to find containment
+		pass_list = []
+		for mg_sig in mg_sig_list:
+			j_sim = mg_sig.contained_by(sag_sig)
+			if j_sim >= 0.9:
+				pass_list.append(mg_sig.name())
+	
 		# Map genome id and contig id to taxid for error analysis
 		contig_taxmap_df = pd.read_csv(contig_tax_map, sep='\t', header=0)
 		sag_taxmap_df = pd.read_csv(sag_tax_map, sep='\t', header=0)
@@ -590,22 +632,22 @@ def main():
 			contig_header = index.rsplit('_', 1)[0] #index.rsplit('|', 1)[0]
 			#if ((index in pass_list) and
 			if ((contig_header in contig_pass_list) and
-				(contig2taxid[contig_header] == sag_taxid)
+				(contig2genomeid[contig_header] == sag_key)
 					):
 				mg_idf_errors.append('TruePos')
 			#elif ((index in pass_list) and
 			elif ((contig_header in contig_pass_list) and
-					(contig2taxid[contig_header] != sag_taxid)
+					(contig2genomeid[contig_header] != sag_key)
 					):
 					mg_idf_errors.append('FalsePos')
 			#elif ((index not in pass_list) and
 			elif ((contig_header not in contig_pass_list) and
-					(contig2taxid[contig_header] == sag_taxid)
+					(contig2genomeid[contig_header] == sag_key)
 					):
 				mg_idf_errors.append('FalseNeg')
 			#elif ((index not in pass_list) and
 			elif ((contig_header not in contig_pass_list) and
-					(contig2taxid[contig_header] != sag_taxid)
+					(contig2genomeid[contig_header] != sag_key)
 					):
 				mg_idf_errors.append('TrueNeg')
 		
@@ -638,8 +680,8 @@ def main():
 		mg_rpkm_pass_df = mg_rpkm_trim_df[mg_rpkm_trim_df.index.isin(contig_pass_list)]
 		mg_rpkm_pass_stat_df = mg_rpkm_pass_df.mean().reset_index()
 		mg_rpkm_pass_stat_df.columns = ['sample_id', 'mean']
-		mg_rpkm_pass_stat_df['std'] = mg_rpkm_pass_df.std()
-		mg_rpkm_pass_stat_df['var'] = mg_rpkm_pass_df.var()
+		mg_rpkm_pass_stat_df['std'] = list(mg_rpkm_pass_df.std())
+		mg_rpkm_pass_stat_df['var'] = list(mg_rpkm_pass_df.var())
 
 		# if there is only one contig in the dataframe, use 25% of abundance as STD
 		if mg_rpkm_pass_stat_df['std'].isnull().values.any() == True:
@@ -688,21 +730,21 @@ def main():
 			#var_pass = var_rpkm_keep_dict[contig_header]
 			std_pass_list = std_rpkm_keep_dict[contig_header]
 			pass_percent = (std_pass_list.count(True) / len(std_pass_list))
-			percent_thresh = 1.0
+			percent_thresh = 0.8
 			if ((pass_percent >= percent_thresh) and
-					(contig2taxid[contig_header] == sag_taxid)
+					(contig2genomeid[contig_header] == sag_key)
 					):
 				mg_cdf_errors.append('TruePos')
 			elif ((pass_percent >= percent_thresh) and
-					(contig2taxid[contig_header] != sag_taxid)
+					(contig2genomeid[contig_header] != sag_key)
 					):
 				mg_cdf_errors.append('FalsePos')
 			elif ((pass_percent < percent_thresh) and
-					(contig2taxid[contig_header] == sag_taxid)
+					(contig2genomeid[contig_header] == sag_key)
 					):
 				mg_cdf_errors.append('FalseNeg')
 			elif ((pass_percent < percent_thresh) and
-					(contig2taxid[contig_header] != sag_taxid)
+					(contig2genomeid[contig_header] != sag_key)
 					):
 				mg_cdf_errors.append('TrueNeg')
 		error_dict['cdf_errors'] = mg_cdf_errors
@@ -806,19 +848,19 @@ def main():
 				pass_percent = (gmm_pass_list.count(True)/len(gmm_pass_list))
 				percent_thresh = 1/len(gmm_pass_list)
 				if ((pass_percent >= percent_thresh) and
-						(contig2taxid[contig_header] == sag_taxid)
+						(contig2genomeid[contig_header] == sag_key)
 						):
 					mg_htf_errors[mg_tetra_df.index.get_loc(index)] = 'TruePos'
 				elif ((pass_percent >= percent_thresh) and
-						(contig2taxid[contig_header] != sag_taxid)
+						(contig2genomeid[contig_header] != sag_key)
 						):
 					mg_htf_errors[mg_tetra_df.index.get_loc(index)] = 'FalsePos'
 				elif ((pass_percent < percent_thresh) and
-						(contig2taxid[contig_header] == sag_taxid)
+						(contig2genomeid[contig_header] == sag_key)
 						):
 					mg_htf_errors[mg_tetra_df.index.get_loc(index)] = 'FalseNeg'
 				elif ((pass_percent < percent_thresh) and
-						(contig2taxid[contig_header] != sag_taxid)
+						(contig2genomeid[contig_header] != sag_key)
 						):
 					mg_htf_errors[mg_tetra_df.index.get_loc(index)] = 'TrueNeg'
 
