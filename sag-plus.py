@@ -1,5 +1,5 @@
 import sys
-from os import listdir
+from os import listdir, makedirs, path
 from os.path import isfile, join, isdir, basename, dirname
 from itertools import islice, product, combinations
 import pandas as pd
@@ -9,7 +9,7 @@ matplotlib.use('agg')
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
-import hdbscan
+#import hdbscan
 import umap
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, normalize
 from sklearn.decomposition import PCA
@@ -26,7 +26,7 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 import pickle
 import functools
 import statistics
-from datasketch import MinHash, MinHashLSH
+#from datasketch import MinHash, MinHashLSH
 import itertools
 import sourmash
 
@@ -412,6 +412,9 @@ def main():
 	# TODO: output number of tetras/kmers skipped b/c of ambiguous nucs
 	# TODO: cythonize tetra_cnt and calc_seg to optimize
 
+	if not path.exists(save_path):
+		makedirs(save_path)
+
 	if isdir(sag_path):
 		print('[SAG+]: Directory specified, looking for .fasta files within')
 		sag_list = [join(sag_path, f) for f in
@@ -499,19 +502,19 @@ def main():
 		'''
 		# Calculate MinHash Signatures with SourMash for SAG subseqs
 		if isfile(join(save_path, sag_id + '.minhash.sig')): 
-			sag_sig = sourmash.signature.load_signatures(join(save_path, sag_id + \
+			sag_sig = sourmash.load_one_signature(join(save_path, sag_id + \
 																'.minhash.sig')
 																)
-			print('[SAG+]: Loaded %s Signatures' % sag_id)
+			print('[SAG+]: Loaded %s Signature' % sag_id)
 		else:
 			print('[SAG+]: Building Signatures for %s' % sag_id)
-			sag_minhash = sourmash.MinHash(n=0, ksize=51, scale=1)
+			sag_minhash = sourmash.MinHash(n=0, ksize=51, scaled=100)
 			for seq in sag_subs:
-				sag_minhash.add_sequence(seq)
+				up_seq = seq.upper()
+				sag_minhash.add_sequence(up_seq, force=True)
 			sag_sig = sourmash.SourmashSignature(sag_minhash, name=sag_id)
-			sourmash.signature.save_signatures(sag_sig,	fp=join(save_path, sag_id + \
-																	'.minhash.sig')
-																	)
+			with open(join(save_path, sag_id + '.minhash.sig'), 'w') as sig_out:
+				sourmash.signature.save_signatures([sag_sig], fp=sig_out)
 
 		# MG Tetras
 		mg_basename = basename(mg_file)
@@ -588,20 +591,24 @@ def main():
 			print('[SAG+]: Building Signatures for %s' % mg_id)
 			mg_sig_list = []
 			for mg_head, seq in mg_sub_tup:
-				mg_minhash = sourmash.MinHash(n=0, ksize=51, scale=1)
-				mg_minhash.add_sequence(seq)
+				up_seq = seq.upper()
+				mg_minhash = sourmash.MinHash(n=0, ksize=51, scaled=100)
+				mg_minhash.add_sequence(up_seq, force=True)
 				mg_sig = sourmash.SourmashSignature(mg_minhash, name=mg_head)
 				mg_sig_list.append(mg_sig)
-			sourmash.signature.save_signatures(mg_sig_list,	fp=join(save_path, mg_id + \
-																	'.minhash.sig')
-																	)
+			with open(join(save_path, mg_id + '.minhash.sig'), 'w') as sig_out:
+				sourmash.signature.save_signatures(mg_sig_list,	fp=sig_out)
 		# Compare SAG sigs to MG sigs to find containment
 		pass_list = []
 		for mg_sig in mg_sig_list:
-			j_sim = mg_sig.contained_by(sag_sig)
-			if j_sim >= 0.9:
-				pass_list.append(mg_sig.name())
-	
+			try:
+				j_sim = mg_sig.contained_by(sag_sig)
+				if j_sim >= 0.99:
+					pass_list.append((sag_sig.name(), mg_sig.name()))
+			except:
+				print(sag_sig.name())
+				print(mg_sig.name())
+		print('[SAG+]: Identified %s subcontigs with Sourmash' % len(pass_list))
 		# Map genome id and contig id to taxid for error analysis
 		contig_taxmap_df = pd.read_csv(contig_tax_map, sep='\t', header=0)
 		sag_taxmap_df = pd.read_csv(sag_tax_map, sep='\t', header=0)
@@ -623,7 +630,7 @@ def main():
 		# Look at ID filter (idf) error types
 		### Experiment ###
 		# If any subseq in full contig is in pass_list, whole contig is passes
-		contig_pass_list = [x.rsplit('_', 1)[0] for x in pass_list]
+		contig_pass_list = [x[1].rsplit('_', 1)[0] for x in pass_list]
 		### Experiment ###
 
 		error_dict = {}
