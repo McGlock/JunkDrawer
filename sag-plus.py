@@ -603,11 +603,12 @@ def main():
 		for mg_sig in mg_sig_list:
 			try:
 				j_sim = mg_sig.contained_by(sag_sig)
-				if j_sim >= 0.99:
+				if j_sim >= 1.0:
 					pass_list.append((sag_sig.name(), mg_sig.name()))
 			except:
-				print(sag_sig.name())
+				print('\n' + sag_sig.name())
 				print(mg_sig.name())
+
 		print('[SAG+]: Identified %s subcontigs with Sourmash' % len(pass_list))
 		# Map genome id and contig id to taxid for error analysis
 		contig_taxmap_df = pd.read_csv(contig_tax_map, sep='\t', header=0)

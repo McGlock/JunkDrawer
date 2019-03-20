@@ -61,17 +61,19 @@ for sag_id in list(set(sag_lineage_df['sag_id'])):
 sag_precision_df = pd.DataFrame(sag_precision_list,
 								columns=['sag_id', 'level', 'precision']
 								)
+sag_precision_df.to_csv('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/SAG_plus_error/precision_level.tsv', index=False, sep='\t')
 
 # build multi-level precision boxplot
 sns.set_context("paper")
 ax = sns.catplot( x="level", y="precision", kind='box', data=sag_precision_df, aspect=2)
 plt.title('SAG-plus CAMI-1-High >0.99 Jaccard index containment')
-plt.savefig('/home/rmclaughlin/Ryan/SAG-plus/SAG_plus_error/multi-level_precision_boxplox.svg', bbox_inches='tight')
+plt.savefig('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/SAG_plus_error/multi-level_precision_boxplox.svg', bbox_inches='tight')
 plt.clf()
 
 
 # concat all error dfs
 final_err_df = pd.concat(df_list)
+final_err_df.to_csv('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/SAG_plus_error/All_error.tsv', index=False, sep='\t')
 filter_out = ['TruePos', 'TrueNeg', 'FalsePos', 'FalseNeg']
 filter_final_err_df = final_err_df.loc[~final_err_df.filter_type.isin(filter_out)]
 # build boxplot for all errors analysis
@@ -79,7 +81,7 @@ sns.set_context("paper")
 ax = sns.catplot( x="statistic", y="score", hue='filter_type', kind='box', data=filter_final_err_df, aspect=2)
 plt.title('SAG-plus CAMI-1-High error analysis')
 ax._legend.set_title('Filter Type')
-plt.savefig('/home/rmclaughlin/Ryan/SAG-plus/SAG_plus_error/perfect_match_error_boxplox.svg', bbox_inches='tight')
+plt.savefig('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/SAG_plus_error/perfect_match_error_boxplox.svg', bbox_inches='tight')
 plt.clf()
 
 
