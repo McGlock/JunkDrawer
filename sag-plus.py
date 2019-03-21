@@ -694,9 +694,9 @@ def main():
 		# if there is only one contig in the dataframe, use 25% of abundance as STD
 		if mg_rpkm_pass_stat_df['std'].isnull().values.any() == True:
 			mg_rpkm_pass_stat_df['min'] = mg_rpkm_pass_stat_df['mean'] - \
-												mg_rpkm_pass_stat_df['mean']*0.25					
+												mg_rpkm_pass_stat_df['mean']*0.15					
 			mg_rpkm_pass_stat_df['max'] = mg_rpkm_pass_stat_df['mean'] + \
-												mg_rpkm_pass_stat_df['mean']*0.25
+												mg_rpkm_pass_stat_df['mean']*0.15
 		else:
 			mg_rpkm_pass_stat_df['min'] = mg_rpkm_pass_stat_df['mean'] - \
 												mg_rpkm_pass_stat_df['std']
@@ -738,7 +738,7 @@ def main():
 			#var_pass = var_rpkm_keep_dict[contig_header]
 			std_pass_list = std_rpkm_keep_dict[contig_header]
 			pass_percent = (std_pass_list.count(True) / len(std_pass_list))
-			percent_thresh = 0.8
+			percent_thresh = 1.0
 			if ((pass_percent >= percent_thresh) and
 					(contig2genomeid[contig_header] == sag_key)
 					):
@@ -759,6 +759,7 @@ def main():
 		cdf_bools = pd.Series([True if 'Pos' in x else False for x in mg_cdf_errors
 								], name='bools'
 								)
+		print(cdf_bools.value_counts())
 		### END
 		
 
