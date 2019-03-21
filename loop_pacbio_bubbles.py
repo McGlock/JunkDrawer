@@ -24,7 +24,7 @@ for file in looptax_file_list:
 	looptax_file = looptax_path + '.'.join([looptax_prefix, file])
 	looptax_df = pd.read_csv(looptax_file, sep='\t', header=0)
 	# remove singleton OTUs and calc proportions
-	looptax_df = looptax_df.loc[looptax_df['Size'] > 1]
+	#looptax_df = looptax_df.loc[looptax_df['Size'] > 1]
 	#looptax_df['size_prop'] = (looptax_df['Size']/sum(looptax_df['Size']))*100
 	#looptax_df = looptax_df.loc[looptax_df['size_prop'] > 0.1]
 	# Add depth
@@ -50,7 +50,7 @@ for file in pacbiotax_file_list:
 	pacbiotax_file = pacbiotax_path + '.'.join([pacbiotax_prefix, file])
 	pacbiotax_df = pd.read_csv(pacbiotax_file, sep='\t', header=0)
 	# remove singleton OTUs and calc proportions
-	pacbiotax_df = pacbiotax_df.loc[pacbiotax_df['Size'] > 1]
+	#pacbiotax_df = pacbiotax_df.loc[pacbiotax_df['Size'] > 1]
 	#pacbiotax_df['size_prop'] = (pacbiotax_df['Size']/sum(pacbiotax_df['Size']))*100
 	#pacbiotax_df = pacbiotax_df.loc[pacbiotax_df['size_prop'] > 0.1]
 	# Add depth
@@ -112,43 +112,52 @@ merge_df = pd.merge(concat_df, taxpath_df, on='Taxonomy')
 filter_df = merge_df[['OTU', 'Size', 'depth', 'seqtype', 'Domain', 'Phylum',
        'Class', 'Order', 'Family', 'Genus']]
 
-'''
-# Split the lineage info into major clades
-splitter = lambda x: pd.Series([i.split('(')[0] for i in x.split(';')])
-split_df = concat_df['Taxonomy'].apply(splitter)
-split_df.rename(columns={0:'Domain', 1:'Phylum', 2:'Class', 3:'Order', 4:'Family',
-						5:'Genus', 6:'Species'}, inplace=True)
-# Drop species since its empty
-#split_df.drop(columns=['Species'], inplace=True)
 
-merge_df = pd.merge(concat_df[['OTU', 'Size', 'size_prop', 'seqtype', 'depth']],
-						split_df, left_index=True, right_index=True
-						)
-# remove unclassified Bacteria
-#merge_df = merge_df.loc[merge_df['Phylum'] != 'Bacteria_unclassified']
-'''
+# find all Candidate groups
+candidate_key_list = ['Gracilibacteria', 'Aerophobetes', 'BRC1', 'Fermentibacteria',
+						'JL-ETNP-Z39', 'Kazan-3B-28', 'LD1-PA38', 'MVP-21', 'NPL-UPA2',
+						'OC31', 'Parcubacteria', 'Microgenomates', 'Omnitrophica',
+						'Aminicenantes', 'Atribacteria', 'RF3', 'SM2F11',
+						'Absconditabacteria', 'TA06', 'Dependentiae', 'Saccharibacteria',
+						'WCHB1-60', 'Latescibacteria', 'WS6', 'Cloacimonetes', 'BD1-5',
+						'CD12', 'BRC1', 'Hyd24-12', 'JL-ETNP-Z39', 'Kazan-3B-28',
+						'LD1-PA38', 'MVP-21', 'NPL-UPA2', 'OC31', 'OD1', 'OP11',
+						'OP3', 'OP8', 'OP9/JS1', 'RF3', 'SM2F11', 'SR1', 'TA06',
+						'TM6', 'TM7', 'WCHB1-60', 'WS3', 'WS6', 'WWE1'
+						]
+candidate_list = []
+for i, row in filter_df.iterrows():
+	inter_list = [x for x in row if str(x) in candidate_key_list]
+	if ((any('andidat' in str(s) for s in row)) or(len(inter_list) != 0)):
+		candidate_list.append(True)
+	else:
+		candidate_list.append(False)
+filter_df['candidate'] = candidate_list
+# add * to all candidate phyla
+filter_df['Phylum'] = ['*'+x[0]+'*' if x[1] == True else x[0]
+						for x in zip(filter_df['Phylum'], filter_df['candidate'])
+						]
+# remove the Euks
+filter_df = filter_df[filter_df['Domain'] != 'Eukaryota']
+
 
 # Order phylum by domain
 dom_phy_list = zip(filter_df['Domain'], filter_df['Phylum'])
-sort_dom_phy_list = sorted(set(dom_phy_list), key=itemgetter(0))
-phylum_set = [x[1] for x in sort_dom_phy_list]
+sort_dom_phy_list = sorted(set(dom_phy_list), key=itemgetter(1), reverse=True)
+sort_dom_phy_list.sort(key=itemgetter(0))
+phylum_set = [x[1] for x in sort_dom_phy_list if '*' not in x[1]]
+# add Candidates to end
+cand_list = [x[1] for x in sort_dom_phy_list if '*' in x[1]]
+cand_list.extend(phylum_set)
+phylum_set = cand_list
+remove_list = ['phylum', 'uncultured', 'not_classified']
+phylum_set = [x for x in phylum_set if x not in remove_list]
 
-'''
-# find all Candidate groups
-for phylum in phylum_set:
-	print(phylum)
-	p_df = merge_df.loc[merge_df['Phylum'] == phylum]
-	print(p_df.head())
-	for col in p_df.columns:
-		print(col)
-		col_dat = p_df[col]
-		print(list(col_dat.str.contains('andidat')))
-'''
 
 seqtype_list = list(set(filter_df['seqtype']))
 domain_list = list(set(filter_df['Domain']))
 for seqtype in seqtype_list:
-	seqtype_df = filter_df.loc[filter_df['seqtype'] == seqtype]
+	seqtype_df = filter_df.loc[(filter_df['seqtype'] == seqtype)]
 	domain_df = seqtype_df.copy()
 	#for domain in domain_list:
 		#domain_df = seqtype_df.loc[seqtype_df['Domain'] == domain]
@@ -157,11 +166,17 @@ for seqtype in seqtype_list:
 	domain_df['depth_sum'] = [depth_sum_dict[x] for x in domain_df['depth']]
 	domain_df['size_prop'] = (domain_df['Size']/domain_df['depth_sum'])*100
 
-	phylum_df = domain_df.groupby(['Phylum', 'depth'])['size_prop', 'Size'
-				].sum().reset_index()
+	phylum_df = domain_df.groupby(['Phylum', 'depth', 'candidate'])['size_prop',
+									'Size'].sum().reset_index()
 	# remove empty phyla
-	phylum_df = phylum_df[phylum_df['Phylum'] != 'phylum']
+	phylum_df = phylum_df[(phylum_df['Phylum'] != 'phylum') &
+							(phylum_df['Phylum'] != 'uncultured') &
+							(phylum_df['Phylum'] != 'not_classified')]
 	#phylum_set = sorted(set(phylum_df['Phylum']))
+	# add spacer at bottom and top of fig
+	phylum_set.insert(0, 'bottom_spacer')
+	phylum_set.append('top_spacer')
+
 	y_dict = dict((y[1], y[0]) for y in enumerate(phylum_set))
 	depth_order_list = ['30M', '36M', '40M', '45M', '50M', '60M', '80M', '120M']
 	x_dict = dict((x[1], x[0]) for x in enumerate(depth_order_list))
