@@ -25,20 +25,31 @@ taxpath_df['species'] = [x[1] if str(x[0]) == '' else x[0] for x in
 files_path = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/test_sourmash/'
 df_list = []
 sag_taxid_list = []
-for file in os.listdir(files_path):
-	file_path = os.path.join(files_path, file)
+# only process if error file exists
+error_file_list = [x for x in os.listdir(files_path) 
+					if ('_error_stats.tsv' in x and
+					x != 'total_error_stats.tsv')
+					]
+fasta_file_list = [x.rsplit('_', 2)[0] + '.idf_plus_htf.predicted_contigs.fasta'
+					for x in error_file_list
+					]
+
+for err_file in error_file_list:
+	file_path = os.path.join(files_path, err_file)
 	taxid_list = []
-	if ('_error_stats.tsv' in file and file != 'total_error_stats.tsv'):
-		file_df = pd.read_csv(file_path, sep='\t', header=0)
-		df_list.append(file_df)
-	elif '.idf_plus_htf.predicted_contigs.fasta' in file:
-		sag_id = file.split('.idf_plus_htf.predicted_contigs.fasta')[0]
-		with open(file_path, 'r') as fast_in:
-			data = fast_in.readlines()
-			for line in data:
-				if '>' in line:
-					taxid = line.split('|')[-1].rstrip('\n')
-					sag_taxid_list.append([sag_id, taxid])
+	file_df = pd.read_csv(file_path, sep='\t', header=0)
+	df_list.append(file_df)
+	
+
+for fa_file in fasta_file_list:
+	sag_id = fa_file.split('.idf_plus_htf.predicted_contigs.fasta')[0]
+	file_path = os.path.join(files_path, fa_file)
+	with open(file_path, 'r') as fast_in:
+		data = fast_in.readlines()
+		for line in data:
+			if '>' in line:
+				taxid = line.split('|')[-1].rstrip('\n')
+				sag_taxid_list.append([sag_id, taxid])
 sag_taxid_df = pd.DataFrame(sag_taxid_list, columns=['sag_id', 'strain'])
 sag_lineage_df = sag_taxid_df.merge(taxpath_df, on='strain')
 
