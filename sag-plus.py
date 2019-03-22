@@ -690,18 +690,21 @@ def main():
 		mg_rpkm_pass_stat_df.columns = ['sample_id', 'mean']
 		mg_rpkm_pass_stat_df['std'] = list(mg_rpkm_pass_df.std())
 		mg_rpkm_pass_stat_df['var'] = list(mg_rpkm_pass_df.var())
+		mg_rpkm_pass_stat_df['IQ_25'] = list(mg_rpkm_pass_df.quantile(0.25))
+		mg_rpkm_pass_stat_df['IQ_75'] = list(mg_rpkm_pass_df.quantile(0.75))
 
-		# if there is only one contig in the dataframe, use 25% of abundance as STD
+		# if there is only one contig in the dataframe, use mean STD of all pass for now :/
 		if mg_rpkm_pass_stat_df['std'].isnull().values.any() == True:
-			mg_rpkm_pass_stat_df['min'] = mg_rpkm_pass_stat_df['mean'] - \
-												mg_rpkm_pass_stat_df['mean']*0.15					
-			mg_rpkm_pass_stat_df['max'] = mg_rpkm_pass_stat_df['mean'] + \
-												mg_rpkm_pass_stat_df['mean']*0.15
+			mean_STD = mg_rpkm_pass_stat_df['std'].mean()
+			mg_rpkm_pass_stat_df['min'] = mg_rpkm_pass_stat_df['mean'] - mean_STD
+																	
+			mg_rpkm_pass_stat_df['max'] = mg_rpkm_pass_stat_df['mean'] + mean_STD
+												
 		else:
 			mg_rpkm_pass_stat_df['min'] = mg_rpkm_pass_stat_df['mean'] - \
-												mg_rpkm_pass_stat_df['std']
+													mg_rpkm_pass_stat_df['std']
 			mg_rpkm_pass_stat_df['max'] = mg_rpkm_pass_stat_df['mean'] + \
-												mg_rpkm_pass_stat_df['std']
+													mg_rpkm_pass_stat_df['std']
 
 		# use the "passed" mg as reference to recruit more
 		std_rpkm_keep_dict = {x: [] for x in mg_rpkm_trim_df.index}
@@ -709,8 +712,8 @@ def main():
 			contig_header = index
 			for i, rpkm_val in enumerate(row):
 				pass_stats = mg_rpkm_pass_stat_df.iloc[[i]]
-				pass_min = pass_stats['min'].values[0]
-				pass_max = pass_stats['max'].values[0]
+				pass_min = pass_stats['IQ_25'].values[0]
+				pass_max = pass_stats['IQ_75'].values[0]
 				if (pass_min <= rpkm_val <= pass_max):
 					std_rpkm_keep_dict[contig_header].append(True)
 				else:
