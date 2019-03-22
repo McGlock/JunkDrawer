@@ -692,7 +692,9 @@ def main():
 		mg_rpkm_pass_stat_df['var'] = list(mg_rpkm_pass_df.var())
 		mg_rpkm_pass_stat_df['IQ_25'] = list(mg_rpkm_pass_df.quantile(0.25))
 		mg_rpkm_pass_stat_df['IQ_75'] = list(mg_rpkm_pass_df.quantile(0.75))
-
+		mg_rpkm_pass_stat_df['IQ_10'] = list(mg_rpkm_pass_df.quantile(0.10))
+		mg_rpkm_pass_stat_df['IQ_90'] = list(mg_rpkm_pass_df.quantile(0.90))
+		'''
 		# if there is only one contig in the dataframe, use mean STD of all pass for now :/
 		if mg_rpkm_pass_stat_df['std'].isnull().values.any() == True:
 			mean_STD = mg_rpkm_pass_stat_df['std'].mean()
@@ -705,15 +707,15 @@ def main():
 													mg_rpkm_pass_stat_df['std']
 			mg_rpkm_pass_stat_df['max'] = mg_rpkm_pass_stat_df['mean'] + \
 													mg_rpkm_pass_stat_df['std']
-
+		'''
 		# use the "passed" mg as reference to recruit more
 		std_rpkm_keep_dict = {x: [] for x in mg_rpkm_trim_df.index}
 		for index, row in mg_rpkm_trim_df.iterrows():
 			contig_header = index
 			for i, rpkm_val in enumerate(row):
 				pass_stats = mg_rpkm_pass_stat_df.iloc[[i]]
-				pass_min = pass_stats['IQ_25'].values[0]
-				pass_max = pass_stats['IQ_75'].values[0]
+				pass_min = pass_stats['IQ_10'].values[0]
+				pass_max = pass_stats['IQ_90'].values[0]
 				if (pass_min <= rpkm_val <= pass_max):
 					std_rpkm_keep_dict[contig_header].append(True)
 				else:
