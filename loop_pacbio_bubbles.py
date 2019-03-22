@@ -87,20 +87,38 @@ taxpath_dict = {x:['domain', 'phylum', 'class', 'order',
 					'family', 'genus'] for x in
 					list(set(concat_df['Taxonomy']))
 					}
+
 for taxpath in taxpath_dict.keys():
 	include_clade_list = taxpath_dict[taxpath]
 	for i, clade in enumerate(include_clade_list):
-		silva_clade_list = list(silva_tax_df.loc[
-									silva_tax_df['rank'] == clade]['taxname']
-									)
-		found_clade_list = list(set([x for x in silva_clade_list if x in taxpath]))
-		if (len(found_clade_list) > 1 and 'uncultured' in found_clade_list):
-			found_clade_list.remove('uncultured')
+		silva_clade_list = [x for x in list(silva_tax_df.loc[
+									silva_tax_df['rank'] == clade]['taxname'])
+									if x not in ['uncultured', 'unclassified']
+									]
+		taxpath_list = [y.rsplit('(', 1)[0] for y in taxpath.split(';')]
+		found_clade_list = list(set([x for x in taxpath_list if x in silva_clade_list]))
+		if len(found_clade_list) > 1:
+			t_cnt_list = []
+			for t in found_clade_list:
+				silva_cnt = silva_clade_list.count(t)
+				path_cnt = taxpath_list.count(t)
+				if silva_cnt == path_cnt:
+					new_list = [t]
+			found_clade_list = new_list
 			taxpath_dict[taxpath][i] = found_clade_list[0]
 		elif len(found_clade_list) == 1:
 			taxpath_dict[taxpath][i] = found_clade_list[0]
 		elif len(found_clade_list) < 1:
-			taxpath_dict[taxpath][i] = 'not_classified'
+			if i == 0:
+				unclass_label = 'unclassified'
+			elif i > 0:
+				if (('_unclassified' in taxpath_dict[taxpath][i-1]) or
+					('unclassified' in taxpath_dict[taxpath][i-1])
+					):
+					unclass_label = taxpath_dict[taxpath][i-1]
+				else: 
+					unclass_label = taxpath_dict[taxpath][i-1] + '_unclassified'
+			taxpath_dict[taxpath][i] = unclass_label
 
 taxpath_df = pd.DataFrame.from_dict(taxpath_dict, orient='index',
 									columns=['Domain','Phylum','Class',
@@ -110,8 +128,8 @@ taxpath_df.index.names = ['Taxonomy']
 taxpath_df.reset_index(inplace=True)
 merge_df = pd.merge(concat_df, taxpath_df, on='Taxonomy')
 filter_df = merge_df[['OTU', 'Size', 'depth', 'seqtype', 'Domain', 'Phylum',
-       'Class', 'Order', 'Family', 'Genus']]
-
+       'Class', 'Order', 'Family', 'Genus'
+       ]]
 
 # find all Candidate groups
 candidate_key_list = ['Gracilibacteria', 'Aerophobetes', 'BRC1', 'Fermentibacteria',
@@ -133,9 +151,13 @@ for i, row in filter_df.iterrows():
 	else:
 		candidate_list.append(False)
 filter_df['candidate'] = candidate_list
+# join phylum and class
+filter_df['label'] = [x[0] + ' ' + x[1] for x in
+						zip(filter_df['Phylum'], filter_df['Class'])
+						]
 # add * to all candidate phyla
-filter_df['Phylum'] = ['*'+x[0]+'*' if x[1] == True else x[0]
-						for x in zip(filter_df['Phylum'], filter_df['candidate'])
+filter_df['label'] = ['*'+x[0]+'*' if x[1] == True else x[0]
+						for x in zip(filter_df['label'], filter_df['candidate'])
 						]
 # remove the Euks
 filter_df = filter_df[filter_df['Domain'] != 'Eukaryota']
@@ -147,12 +169,18 @@ sort_dom_phy_list = sorted(set(dom_phy_list), key=itemgetter(1), reverse=True)
 sort_dom_phy_list.sort(key=itemgetter(0))
 phylum_set = [x[1] for x in sort_dom_phy_list if '*' not in x[1]]
 # add Candidates to end
-cand_list = [x[1] for x in sort_dom_phy_list if '*' in x[1]]
-cand_list.extend(phylum_set)
-phylum_set = cand_list
-remove_list = ['phylum', 'uncultured', 'not_classified']
-phylum_set = [x for x in phylum_set if x not in remove_list]
-
+cand_phy_list = [x[1] for x in sort_dom_phy_list if '*' in x[1]]
+cand_phy_list.extend(phylum_set)
+phylum_set = cand_phy_list
+# Order class by domain
+dom_cla_list = zip(filter_df['Domain'], filter_df['label'])
+sort_dom_cla_list = sorted(set(dom_cla_list), key=itemgetter(1), reverse=True)
+sort_dom_cla_list.sort(key=itemgetter(0))
+class_set = [x[1] for x in sort_dom_cla_list if '*' not in x[1]]
+# add Candidates to end
+cand_cla_list = [x[1] for x in sort_dom_cla_list if '*' in x[1]]
+cand_cla_list.extend(class_set)
+class_set = cand_cla_list
 
 seqtype_list = list(set(filter_df['seqtype']))
 domain_list = list(set(filter_df['Domain']))
@@ -165,24 +193,24 @@ for seqtype in seqtype_list:
 	depth_sum_dict = domain_df.groupby(['depth'])['Size'].sum().to_dict()
 	domain_df['depth_sum'] = [depth_sum_dict[x] for x in domain_df['depth']]
 	domain_df['size_prop'] = (domain_df['Size']/domain_df['depth_sum'])*100
+	#domain_df = domain_df.loc[domain_df['Size'] > 1]
 
-	phylum_df = domain_df.groupby(['Phylum', 'depth', 'candidate'])['size_prop',
+	class_df = domain_df.groupby(['Phylum', 'label', 'depth', 'candidate'])['size_prop',
 									'Size'].sum().reset_index()
-	# remove empty phyla
-	phylum_df = phylum_df[(phylum_df['Phylum'] != 'phylum') &
-							(phylum_df['Phylum'] != 'uncultured') &
-							(phylum_df['Phylum'] != 'not_classified')]
-	#phylum_set = sorted(set(phylum_df['Phylum']))
-	# add spacer at bottom and top of fig
-	phylum_set.insert(0, 'bottom_spacer')
-	phylum_set.append('top_spacer')
+	phylum_df = domain_df.groupby(['Phylum', 'depth', 'candidate'])['size_prop',
+									'Size'].sum().reset_index()				
+	phylum_set.insert(0, '')
+	phylum_set.append('')
+	class_set.insert(0, '')
+	class_set.append('')
 
-	y_dict = dict((y[1], y[0]) for y in enumerate(phylum_set))
+	# Phylum % plot
+	phy_y_dict = dict((y[1], y[0]) for y in enumerate(phylum_set))
 	depth_order_list = ['30M', '36M', '40M', '45M', '50M', '60M', '80M', '120M']
 	x_dict = dict((x[1], x[0]) for x in enumerate(depth_order_list))
 
 	phylum_df['x_index'] = [x_dict[x] for x in phylum_df['depth']]
-	phylum_df['y_index'] = [y_dict[y] for y in phylum_df['Phylum']]
+	phylum_df['y_index'] = [phy_y_dict[y] for y in phylum_df['Phylum']]
 
 	legend_markers = [scatter([0], [0], marker='o',label='<0.1', color='k'),
 					scatter([0], [0], marker='o',label='1', color='k'),
@@ -191,7 +219,7 @@ for seqtype in seqtype_list:
 					scatter([0], [0], marker='o',label='50', color='k'),
 					scatter([0], [0], marker='o',label='100', color='k')
 					]
-	plt.figure(figsize=(6,14))
+	plt.figure(figsize=(6,18))
 	plt.grid(zorder=0)
 	scaler = 5
 	plt.scatter(x = phylum_df['x_index'],
@@ -204,12 +232,10 @@ for seqtype in seqtype_list:
 	x_labels = [l for l in list(x_dict.keys())]
 	plt.xticks(x_ticks, x_labels)
 
-	y_ticks = [y_dict[y] for y in y_dict.keys()]
-	y_labels = [l for l in list(y_dict.keys())]
+	y_ticks = [phy_y_dict[y] for y in phy_y_dict.keys()]
+	y_labels = [l for l in list(phy_y_dict.keys())]
+	plt.tick_params(axis='both', labelsize=10)
 	plt.yticks(y_ticks, y_labels)
-	#plt.xticks(rotation=90)
-
-	#plt.title(sample, fontsize=20)
 	lgnd = plt.legend(title='Percent', handles=legend_markers, bbox_to_anchor=(1.05, 1),
 						loc=2, borderaxespad=0., scatterpoints=1, fontsize=10,
 						labelspacing=2, borderpad=4
@@ -220,23 +246,59 @@ for seqtype in seqtype_list:
 	lgnd.legendHandles[3]._sizes = [25*scaler]
 	lgnd.legendHandles[4]._sizes = [50*scaler]
 	lgnd.legendHandles[5]._sizes = [100*scaler]
-	#plt.xlabel('Sample ID')
-	#plt.ylabel('Genus species')
-	#plt.ylim(0, 100)
 	plt.savefig('/home/rmclaughlin/LoopG/Ryan_work/code/' + seqtype +
-					'_Depth_Phylum_Percent.svg', bbox_inches='tight')
-	#plt.savefig('/home/rmclaughlin/LoopG/Ryan_work/code/' + seqtype +
-	#				'_' + domain + 
-	#				'_Depth_Phylum_Percent.svg', bbox_inches='tight'
-	#				)
+					'_Depth_Phylum_Percent.svg', bbox_inches='tight'
+					)
 	plt.clf()
 
-	#phylum_df = domain_df.groupby(['Phylum', 'depth'])['Size'
-	#			].sum().reset_index()
+	# Class % plot
+	cla_y_dict = dict((y[1], y[0]) for y in enumerate(class_set))
+	depth_order_list = ['30M', '36M', '40M', '45M', '50M', '60M', '80M', '120M']
+	x_dict = dict((x[1], x[0]) for x in enumerate(depth_order_list))
 
-	#phylum_df['x_index'] = [x_dict[x] for x in phylum_df['depth']]
-	#phylum_df['y_index'] = [y_dict[y] for y in phylum_df['Phylum']]
+	class_df['x_index'] = [x_dict[x] for x in class_df['depth']]
+	class_df['y_index'] = [cla_y_dict[y] for y in class_df['label']]
 
+	legend_markers = [scatter([0], [0], marker='o',label='<0.1', color='k'),
+					scatter([0], [0], marker='o',label='1', color='k'),
+					scatter([0], [0], marker='o',label='10', color='k'),
+					scatter([0], [0], marker='o',label='25', color='k'),
+					scatter([0], [0], marker='o',label='50', color='k'),
+					scatter([0], [0], marker='o',label='100', color='k')
+					]
+	plt.figure(figsize=(6,24))
+	plt.grid(zorder=0)
+	scaler = 5
+	plt.scatter(x = class_df['x_index'],
+	            y = class_df['y_index'],
+	            s = class_df['size_prop']*scaler,
+	            color='k',
+	            alpha = 1, zorder=3)
+
+	x_ticks = [x_dict[x] for x in x_dict.keys()]
+	x_labels = [l for l in list(x_dict.keys())]
+	plt.xticks(x_ticks, x_labels)
+
+	y_ticks = [cla_y_dict[y] for y in cla_y_dict.keys()]
+	y_labels = [l for l in list(cla_y_dict.keys())]
+	plt.tick_params(axis='both', labelsize=10)
+	plt.yticks(y_ticks, y_labels)
+	lgnd = plt.legend(title='Percent', handles=legend_markers, bbox_to_anchor=(1.05, 1),
+						loc=2, borderaxespad=0., scatterpoints=1, fontsize=10,
+						labelspacing=2, borderpad=4
+						)
+	lgnd.legendHandles[0]._sizes = [0.1*scaler]
+	lgnd.legendHandles[1]._sizes = [1*scaler]
+	lgnd.legendHandles[2]._sizes = [10*scaler]
+	lgnd.legendHandles[3]._sizes = [25*scaler]
+	lgnd.legendHandles[4]._sizes = [50*scaler]
+	lgnd.legendHandles[5]._sizes = [100*scaler]
+	plt.savefig('/home/rmclaughlin/LoopG/Ryan_work/code/' + seqtype +
+					'_Depth_Class_Percent.svg', bbox_inches='tight'
+					)
+	plt.clf()
+
+	# Phylum Raw Count
 	legend_markers = [scatter([0], [0], marker='o',label='<10', color='k'),
 					scatter([0], [0], marker='o',label='500', color='k'),
 					scatter([0], [0], marker='o',label='1000', color='k'),
@@ -244,7 +306,7 @@ for seqtype in seqtype_list:
 					scatter([0], [0], marker='o',label='5000', color='k'),
 					scatter([0], [0], marker='o',label='10000', color='k')
 					]
-	plt.figure(figsize=(6,14))
+	plt.figure(figsize=(6,18))
 	plt.grid(zorder=0)
 	scaler = 0.05
 	plt.scatter(x = phylum_df['x_index'],
@@ -257,12 +319,10 @@ for seqtype in seqtype_list:
 	x_labels = [l for l in list(x_dict.keys())]
 	plt.xticks(x_ticks, x_labels)
 
-	y_ticks = [y_dict[y] for y in y_dict.keys()]
-	y_labels = [l for l in list(y_dict.keys())]
+	y_ticks = [phy_y_dict[y] for y in phy_y_dict.keys()]
+	y_labels = [l for l in list(phy_y_dict.keys())]
+	plt.tick_params(axis='both', labelsize=10)
 	plt.yticks(y_ticks, y_labels)
-	#plt.xticks(rotation=90)
-
-	#plt.title(sample, fontsize=20)
 	lgnd = plt.legend(title='# of OTUs', handles=legend_markers, bbox_to_anchor=(1.05, 1),
 						loc=2, borderaxespad=0., scatterpoints=1, fontsize=10,
 						labelspacing=2, borderpad=4
@@ -273,13 +333,47 @@ for seqtype in seqtype_list:
 	lgnd.legendHandles[3]._sizes = [2500*scaler]
 	lgnd.legendHandles[4]._sizes = [5000*scaler]
 	lgnd.legendHandles[5]._sizes = [10000*scaler]
-	#plt.xlabel('Sample ID')
-	#plt.ylabel('Genus species')
-	#plt.ylim(0, 100)
 	plt.savefig('/home/rmclaughlin/LoopG/Ryan_work/code/' +	seqtype +
-				'_Depth_Phylum_raw_count.svg', bbox_inches='tight')
-	#plt.savefig('/home/rmclaughlin/LoopG/Ryan_work/code/' +	seqtype +
-	#			'_' + domain + 
-	#			'_Depth_Phylum_raw_count.svg', bbox_inches='tight'
-	#			)
+				'_Depth_Phylum_raw_count.svg', bbox_inches='tight'
+				)
+	plt.clf()
+
+
+	# Class Raw Count
+	legend_markers = [scatter([0], [0], marker='o',label='<10', color='k'),
+					scatter([0], [0], marker='o',label='500', color='k'),
+					scatter([0], [0], marker='o',label='1000', color='k'),
+					scatter([0], [0], marker='o',label='2500', color='k'),
+					scatter([0], [0], marker='o',label='5000', color='k'),
+					scatter([0], [0], marker='o',label='10000', color='k')
+					]
+	plt.figure(figsize=(6,24))
+	plt.grid(zorder=0)
+	scaler = 0.05
+	plt.scatter(x = class_df['x_index'],
+	            y = class_df['y_index'],
+	            s = class_df['Size']*scaler,
+	            color='k',
+	            alpha = 1, zorder=3)
+
+	x_ticks = [x_dict[x] for x in x_dict.keys()]
+	x_labels = [l for l in list(x_dict.keys())]
+	plt.xticks(x_ticks, x_labels)
+
+	y_ticks = [cla_y_dict[y] for y in cla_y_dict.keys()]
+	y_labels = [l for l in list(cla_y_dict.keys())]
+	plt.tick_params(axis='both', labelsize=10)
+	plt.yticks(y_ticks, y_labels)
+	lgnd = plt.legend(title='# of OTUs', handles=legend_markers, bbox_to_anchor=(1.05, 1),
+						loc=2, borderaxespad=0., scatterpoints=1, fontsize=10,
+						labelspacing=2, borderpad=4
+						)
+	lgnd.legendHandles[0]._sizes = [10*scaler]
+	lgnd.legendHandles[1]._sizes = [500*scaler]
+	lgnd.legendHandles[2]._sizes = [1000*scaler]
+	lgnd.legendHandles[3]._sizes = [2500*scaler]
+	lgnd.legendHandles[4]._sizes = [5000*scaler]
+	lgnd.legendHandles[5]._sizes = [10000*scaler]
+	plt.savefig('/home/rmclaughlin/LoopG/Ryan_work/code/' +	seqtype +
+				'_Depth_Class_raw_count.svg', bbox_inches='tight')
 	plt.clf()
