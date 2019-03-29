@@ -22,6 +22,10 @@ taxpath_df['species'] = [x[1] if str(x[0]) == '' else x[0] for x in
 							zip(taxpath_df['species'], taxpath_df['genus'])
 							]
 
+# Map MetaG contigs to their genomes
+mg_contig_map = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/gsa_mapping_pool.binning.trimmed'
+mg_contig_map_df = pd.read_csv(mg_contig_map, sep='\t', header=0)
+
 files_path = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/test_sourmash/'
 df_list = []
 sag_taxid_list = []
@@ -49,9 +53,14 @@ for fa_file in fasta_file_list:
 		for line in data:
 			if '>' in line:
 				taxid = line.split('|')[-1].rstrip('\n')
-				sag_taxid_list.append([sag_id, taxid])
-sag_taxid_df = pd.DataFrame(sag_taxid_list, columns=['sag_id', 'strain'])
-sag_lineage_df = sag_taxid_df.merge(taxpath_df, on='strain')
+				mg_contid_id = line.split('_')[0].lstrip('>')
+				sag_key_list = [s for s in sag_taxmap_df['_CAMI_genomeID'] if s in sag_id]
+				sag_key = max(sag_key_list, key=len)
+				sag_taxid_list.append([mg_contid_id, sag_id, taxid])
+
+sag_taxid_df = pd.DataFrame(sag_taxid_list, columns=['mg_contig_id', 'sag_id', 'strain'])
+sag_lineage_df = sag_taxid_df.merge(taxpath_df, on='strain', how='left')
+sag_lineage_df.drop_duplicates(inplace=True)
 
 # Calculate all level of precision
 sag_precision_list = []
@@ -59,25 +68,39 @@ for sag_id in list(set(sag_lineage_df['sag_id'])):
 	sag_key_list = [s for s in sag_taxmap_df['_CAMI_genomeID'] if s in sag_id]
 	sag_key = max(sag_key_list, key=len)
 	sag_sub_df = sag_lineage_df.loc[sag_lineage_df['sag_id'] == sag_id]
+
 	for col in taxpath_df.columns:
 		col_key = taxpath_df.loc[taxpath_df['CAMI_genomeID'] == sag_key, col].iloc[0]
+		cami_include_ids = list(taxpath_df.loc[taxpath_df['CAMI_genomeID'] == sag_key, 'CAMI_genomeID'])
+		mg_tot_contigs = mg_contig_map_df.loc[mg_contig_map_df['BINID'].isin(cami_include_ids)]['@@SEQUENCEID'].count()
+
 		match_dict = sag_sub_df[col].value_counts().to_dict()
+		if col == 'CAMI_genomeID':
+			col = 'perfect'
 		sag_count = int(match_dict[col_key])
 		all_count = sum(match_dict.values())
 		precision = sag_count/all_count
-		if col == 'CAMI_genomeID':
-			col = 'perfect'
-		sag_precision_list.append([sag_id, col, precision])
+		sensitivity = sag_count/mg_tot_contigs
+		if sensitivity > 1.0:
+			sensitivity = 1.0
+		F1_score = 2 * ((precision * sensitivity) / (precision + sensitivity))
+		#sag_precision_list.append([sag_id, col, precision])
+		sag_precision_list.append([sag_id, col, 'precision', precision])
+		sag_precision_list.append([sag_id, col, 'sensitivity', sensitivity])
+		sag_precision_list.append([sag_id, col, 'F1_score', F1_score])
 
 sag_precision_df = pd.DataFrame(sag_precision_list,
-								columns=['sag_id', 'level', 'precision']
+								columns=['sag_id', 'level', 'statistic', 'score']
 								)
-sag_precision_df.to_csv('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/SAG_plus_error/precision_level.tsv', index=False, sep='\t')
+sag_precision_df.to_csv('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/SAG_plus_error/' \
+						'stats_level.tsv', index=False, sep='\t'
+						)
+print(len(set(sag_precision_df['sag_id'])))
 
 # build multi-level precision boxplot
 sns.set_context("paper")
-ax = sns.catplot( x="level", y="precision", kind='box', data=sag_precision_df, aspect=2)
-plt.title('SAG-plus CAMI-1-High >0.99 Jaccard index containment')
+ax = sns.catplot( x="level", y="score", hue='statistic', kind='box', data=sag_precision_df, aspect=2)
+plt.title('SAG-plus CAMI-1-High')
 plt.savefig('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/SAG_plus_error/multi-level_precision_boxplox.svg', bbox_inches='tight')
 plt.clf()
 

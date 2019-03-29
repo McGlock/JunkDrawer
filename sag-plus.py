@@ -716,7 +716,7 @@ def main():
 				pass_stats = mg_rpkm_pass_stat_df.iloc[[i]]
 				pass_min = pass_stats['IQ_10'].values[0]
 				pass_max = pass_stats['IQ_90'].values[0]
-				if (pass_min <= rpkm_val <= pass_max):
+				if ((pass_min <= rpkm_val <= pass_max) or (contig_header in contig_pass_list)):
 					std_rpkm_keep_dict[contig_header].append(True)
 				else:
 					std_rpkm_keep_dict[contig_header].append(False)
