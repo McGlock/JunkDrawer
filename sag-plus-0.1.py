@@ -2,19 +2,18 @@ import sys
 from os import listdir, makedirs, path
 from os.path import isfile, join, isdir, basename, dirname
 import sourmash
+from Bio import SeqIO
 
 
 def get_seqs(fasta_file):
 	sag_contigs = []
-	with open(fasta_file, 'r') as f:
-		data = f.read()
-		split_data = data.split('>')
-		for record in split_data:
-			split_rec = record.split('\n')
-			header = split_rec[0]
-			seq = ''.join(split_rec[1:])
-			if seq != '':
-				sag_contigs.append((header, seq))
+	with open(fasta_file, 'r') as fasta_in:
+		for record in SeqIO.parse(fasta_in, 'fasta'):
+			f_id = record.id
+			f_description = record.description
+			f_seq = record.seq.replace('\n', '')
+			if f_seq != '':
+				sag_contigs.append((f_description, f_seq))
 
 	return sag_contigs
 
