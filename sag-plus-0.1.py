@@ -3,6 +3,7 @@ from os import listdir, makedirs, path
 from os.path import isfile, join, isdir, basename, dirname
 import sourmash
 from Bio import SeqIO
+import pandas as pd
 
 
 def kmer_slide(seq_list, n, o_lap):
@@ -228,32 +229,16 @@ def main():
 	########################### MinHash Recruitment Algorithm ###########################
 	###########################                               ###########################
 	#####################################################################################
+	# TODO: only load sigs if the recruit files are missing
+	# TODO: remove sag_id column in save file
 	print('[SAG+]: Starting MinHash Recruitment Algorithm')
 
-	# Calculate\Load MinHash Signatures with SourMash for SAG subseqs
-	if isfile(join(sig_path, 'SAGs.sig')): 
-		print('[SAG+]: Loading Signatures for all SAGs')
-		sag_sig_list = sourmash.signature.load_signatures(join(sig_path, 'SAGs.sig'))
-	else:
-		sag_sig_list = []
-		print('[SAG+]: Building Signatures for all SAGs')
-		for sag_id, sag_sub_tup in sag_contigs_dict.items():
-			print('[SAG+]: Building Signatures for %s' % sag_id)
-			sag_minhash = sourmash.MinHash(n=0, ksize=51, scaled=100)
-			for sag_head, sag_subseq in sag_sub_tup:
-				sag_upseq = sag_subseq.upper()
-				sag_minhash.add_sequence(sag_upseq, force=True)
-			sag_sig = sourmash.SourmashSignature(sag_minhash, name=sag_id)
-			sag_sig_list.append(sag_sig)
-		with open(join(sig_path, 'SAGs.sig'), 'w') as sags_out:
-			sourmash.signature.save_signatures(sag_sig_list, fp=sags_out)
-	
 	# Calculate/Load MinHash Signatures with SourMash for MG subseqs
 	if isfile(join(sig_path, mg_id + '.metaG.sig')): 
 		print('[SAG+]: Loading %s Signatures' % mg_id)
-		mg_sig_list = list(sourmash.signature.load_signatures(join(sig_path, mg_id + \
+		mg_sig_list = sourmash.signature.load_signatures(join(sig_path, mg_id + \
 															'.metaG.sig')
-															))
+															)
 	else:
 		print('[SAG+]: Building Signatures for %s' % mg_id)
 		mg_sig_list = []
@@ -263,31 +248,45 @@ def main():
 			mg_minhash.add_sequence(up_seq, force=True)
 			mg_sig = sourmash.SourmashSignature(mg_minhash, name=mg_head)
 			mg_sig_list.append(mg_sig)
-		with open(join(save_path, mg_id + '.metaG.sig'), 'w') as mg_out:
+		with open(join(sig_path, mg_id + '.metaG.sig'), 'w') as mg_out:
 			sourmash.signature.save_signatures(mg_sig_list,	fp=mg_out)
 
 	# Load comparisons OR Compare SAG sigs to MG sigs to find containment
 	print('[SAG+]: Comparing Signatures of SAGs to MetaG contigs')
 	sag_pass_dict = {}
-	for i, sag_sig in enumerate(sag_sig_list):
-		sag_nm = sag_sig.name()
-		if isfile(join(mhr_path, sag_nm + '.mhr_recruits.tsv')): 
-			with open(join(mhr_path, sag_sig.name() + '.mhr_recruits.tsv'), 'r') as mhr_in:
+	for sag_id, sag_sub_tup in sag_contigs_dict.items():
+		if isfile(join(mhr_path, sag_id + '.mhr_recruits.tsv')):
+			print('[SAG+]: Loading  %s and MetaG signature recruit list' % sag_id)
+			with open(join(mhr_path, sag_id + '.mhr_recruits.tsv'), 'r') as mhr_in:
 				pass_list = [x.split('\t') for x in mhr_in.readlines()]
-				contig_pass_list = [x[1] for x in pass_list]
-
 		else:
+			# Calculate\Load MinHash Signatures with SourMash for SAG subseqs
+			if isfile(join(sig_path, sag_id + '.SAG.sig')):
+				print('[SAG+]: Loading Signature for %s' % sag_id)
+				sag_sig = sourmash.signature.load_one_signature(join(sig_path,
+																	sag_id + '.SAG.sig')
+																	)
+			else:
+				print('[SAG+]: Building Signature for %s' % sag_id)
+				sag_minhash = sourmash.MinHash(n=0, ksize=51, scaled=100)
+				for sag_head, sag_subseq in sag_sub_tup:
+					sag_upseq = sag_subseq.upper()
+					sag_minhash.add_sequence(sag_upseq, force=True)
+				sag_sig = sourmash.SourmashSignature(sag_minhash, name=sag_id)
+				with open(join(sig_path, sag_id + '.SAG.sig'), 'w') as sags_out:
+					sourmash.signature.save_signatures([sag_sig], fp=sags_out)
+			print('[SAG+]: Comparing  %s and MetaG signatures' % sag_id)
 			pass_list = []
-			for j, s2 in enumerate(mg_sig_list):
-				mg_sig = mg_sig_list[j]
+			sag_sig = sag_sig_dict[sag_id]
+			for j, mg_sig in enumerate(mg_sig_list):
 				jacc_sim = mg_sig.contained_by(sag_sig)
 				if jacc_sim >= 1.0:
-					pass_list.append((sag_nm, mg_sig.name()))
-			with open(join(mhr_path, sag_nm + '.mhr_recruits.tsv'), 'w') as mhr_out:
+					pass_list.append((sag_id, mg_sig.name()))
+			with open(join(mhr_path, sag_id + '.mhr_recruits.tsv'), 'w') as mhr_out:
 				mhr_out.write('\n'.join(['\t'.join(x) for x in pass_list]))
-		contig_pass_list = [x[1] for x in pass_list]
-		sag_pass_dict[sag_nm] = contig_pass_list
-		print('[SAG+]: Recruited %s subcontigs to %s' % (len(pass_list), sag_nm))
+		contig_pass_list = [x[1].rsplit('_', 1)[0] for x in pass_list]
+		sag_pass_dict[sag_id] = contig_pass_list
+		print('[SAG+]: Recruited %s subcontigs to %s' % (len(pass_list), sag_id))
 
 	#####################################################################################
 	#####################################################################################
@@ -300,7 +299,7 @@ def main():
 	########################## Abundance Recruitment Algorithm ##########################
 	##########################                                 ##########################
 	#####################################################################################
-	#NOTE: This is built to accept output from 'join_rpkm_out.py' script
+	# NOTE: This is built to accept output from 'join_rpkm_out.py' script
 	# TODO: rebuild this algorithm to accept standard output from 'rpkm'
 	print('[SAG+]: Starting Abundance Recruitment Algorithm')
 
@@ -317,9 +316,9 @@ def main():
 	mg_rpkm_trim_df.set_index('Sequence_name', inplace=True)
 
 	# get MinHash "passed" mg rpkms
-	print('[SAG+]: Calulating/Loading RPKM stats for SAGs')
 	rpkm_stats_list = []
 	for sag_id, contig_pass_list in sag_pass_dict.items():
+		print('[SAG+]: Calulating/Loading RPKM stats for %s' % sag_id)
 		mg_rpkm_pass_df = mg_rpkm_trim_df[mg_rpkm_trim_df.index.isin(contig_pass_list)]
 		mg_rpkm_pass_stat_df = mg_rpkm_pass_df.mean().reset_index()
 		mg_rpkm_pass_stat_df.columns = ['sample_id', 'mean']
@@ -329,27 +328,22 @@ def main():
 		mg_rpkm_pass_stat_df['IQ_75'] = list(mg_rpkm_pass_df.quantile(0.75))
 		mg_rpkm_pass_stat_df['IQ_10'] = list(mg_rpkm_pass_df.quantile(0.10))
 		mg_rpkm_pass_stat_df['IQ_90'] = list(mg_rpkm_pass_df.quantile(0.90))
-
-		# use the "passed" mg as reference to recruit more
-		iqr_rpkm_keep_dict = {x: [] for x in mg_rpkm_trim_df.index}
-		for index, row in mg_rpkm_trim_df.iterrows():
-			contig_header = index
-			for i, rpkm_val in enumerate(row):
-				pass_stats = mg_rpkm_pass_stat_df.iloc[[i]]
-				pass_min = pass_stats['IQ_10'].values[0]
-				pass_max = pass_stats['IQ_90'].values[0]
-				if ((pass_min <= rpkm_val <= pass_max) or
-					(contig_header in contig_pass_list)
-					):
-					iqr_rpkm_keep_dict[contig_header].append(True)
-				else:
-					iqr_rpkm_keep_dict[contig_header].append(False)
-		print('[SAG+]: Recruited %s contigs to %s' %
-				(iqr_rpkm_keep_dict.values.count(True), sag_id)
+		# Use passed MG from MHR to recruit more seqs
+		iqr_pass_df = mg_rpkm_trim_df.copy()
+		for i, col_nm in enumerate(mg_rpkm_trim_df.columns):
+			pass_stats = mg_rpkm_pass_stat_df.iloc[[i]]
+			pass_min = pass_stats['IQ_10'].values[0]
+			pass_max = pass_stats['IQ_90'].values[0]
+			iqr_pass_df = iqr_pass_df.loc[(iqr_pass_df[col_nm] >= pass_min) &
+											(iqr_pass_df[col_nm] <= pass_max)
+											]
+		contig_pass_list.extend(iqr_pass_df.index.values)
+		iqr_set_list = list(set(contig_pass_list))
+		print('[SAG+]: Recruited %s subcontigs to %s' %
+				(len(iqr_set_list), sag_id)
 				)
-		with open(join(ara_path, sag_nm + '.ara_recruits.tsv'), 'w') as ara_out:
-			ara_out.write('\n'.join(['\t'.join(x) for x in iqr_rpkm_keep_dict.items()]))
-	sys.exit()
+		with open(join(ara_path, sag_id + '.ara_recruits.tsv'), 'w') as ara_out:
+			ara_out.write('\n'.join(iqr_set_list))
 
 	#####################################################################################
 	#####################################################################################
@@ -386,7 +380,7 @@ def main():
 		else:
 			print('[SAG+]: Calculating tetramer Hz matrix for %s' % mg_id + '.' + sag_id)
 			mg_ara_headers, mg_ara_subs = zip(*[x for x in mg_sub_tup
-												if iqr_rpkm_keep_dict[x[0]] == True
+									if iqr_rpkm_keep_dict[x[0].rsplit('_', 1)[0]] == True
 												])
 			mg_tetra_df = pd.DataFrame.from_dict(tetra_cnt(mg_ara_subs))
 			mg_tetra_df['contig_id'] = mg_ara_headers
