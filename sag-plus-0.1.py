@@ -8,6 +8,7 @@ from itertools import product, islice
 import umap
 from sklearn.mixture import GaussianMixture as GMM
 from sklearn.preprocessing import normalize
+import numpy as np
 
 
 
@@ -411,7 +412,7 @@ def main():
 								normed_tetra_df.index.isin(sag_tetra_df.index)
 								]
 		mg_normed_tetra_df = normed_tetra_df[
-								normed_tetra_df.index.isin(cdf_mg_tetra_df.index)
+								normed_tetra_df.index.isin(mg_tetra_df.index)
 								]
 
 		# UMAP for Dimension reduction of tetras
@@ -433,7 +434,7 @@ def main():
 
 		print('[SAG+]: Calculating AIC/BIC')
 		sag_umap_df = umap_df.loc[umap_df.index.isin(sag_tetra_df.index)]
-		mg_umap_df = umap_df.loc[umap_df.index.isin(cdf_mg_tetra_df.index)]
+		mg_umap_df = umap_df.loc[umap_df.index.isin(mg_tetra_df.index)]
 		n_components = np.arange(1, 100, 1)
 		models = [GMM(n, random_state=42)
 			  for n in n_components]
