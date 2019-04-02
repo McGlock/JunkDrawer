@@ -144,6 +144,7 @@ def main():
 	mhr_path = join(save_path, 'minhash_recruits')
 	ara_path = join(save_path, 'rpkm_recruits')
 	tra_path = join(save_path, 'tetra_recruits')
+	final_path = join(save_path, 'final_recruits')
 
 	contig_tax_map = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/gsa_mapping_pool.binning.trimmed'
 	sag_tax_map = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/genome_taxa_info.tsv'
@@ -164,6 +165,8 @@ def main():
 		makedirs(ara_path)
 	if not path.exists(tra_path):
 		makedirs(tra_path)
+	if not path.exists(final_path):
+		makedirs(final_path)
 
 
 	# Find the SAGs!
@@ -264,6 +267,7 @@ def main():
 	# Load comparisons OR Compare SAG sigs to MG sigs to find containment
 	print('[SAG+]: Comparing Signatures of SAGs to MetaG contigs')
 	sag_pass_dict = {}
+	minhash_pass_dict = {}
 	for sag_id, sag_sub_tup in sag_contigs_dict.items():
 		if isfile(join(mhr_path, sag_id + '.mhr_recruits.tsv')):
 			print('[SAG+]: Loading  %s and MetaG signature recruit list' % sag_id)
@@ -296,6 +300,7 @@ def main():
 				mhr_out.write('\n'.join(['\t'.join(x) for x in pass_list]))
 		contig_pass_list = [x[1].rsplit('_', 1)[0] for x in pass_list]
 		sag_pass_dict[sag_id] = contig_pass_list
+		minhash_pass_dict[sag_id] = [x[1] for x in pass_list]
 		print('[SAG+]: Recruited %s subcontigs to %s' % (len(pass_list), sag_id))
 
 	#####################################################################################
@@ -401,90 +406,120 @@ def main():
 			mg_tetra_df.to_csv(join(tra_path, mg_id + '.' + sag_id + '.tetras.tsv'),
 								sep='\t'
 								)
-		# Concat SAG amd MG for GMM
-		concat_tetra_df = pd.concat([sag_tetra_df, mg_tetra_df])
-		normed_tetra_df = pd.DataFrame(normalize(concat_tetra_df.values),
-										columns=concat_tetra_df.columns,
-										index=concat_tetra_df.index
-										)
+		if isfile(join(tra_path, sag_id + '.tra_recruits.tsv')):
+			print('[SAG+]: Loading  %s tetramer Hz recruit list' % sag_id)
+			with open(join(tra_path, sag_id + '.tra_recruits.tsv'), 'r') as tra_in:
+				gmm_pass_list = [x for x in tra_in.readlines()]
+		else:
+			# Concat SAG amd MG for GMM
+			concat_tetra_df = pd.concat([sag_tetra_df, mg_tetra_df])
+			normed_tetra_df = pd.DataFrame(normalize(concat_tetra_df.values),
+											columns=concat_tetra_df.columns,
+											index=concat_tetra_df.index
+											)
 
-		sag_normed_tetra_df = normed_tetra_df[
-								normed_tetra_df.index.isin(sag_tetra_df.index)
-								]
-		mg_normed_tetra_df = normed_tetra_df[
-								normed_tetra_df.index.isin(mg_tetra_df.index)
-								]
+			sag_normed_tetra_df = normed_tetra_df[
+									normed_tetra_df.index.isin(sag_tetra_df.index)
+									]
+			mg_normed_tetra_df = normed_tetra_df[
+									normed_tetra_df.index.isin(mg_tetra_df.index)
+									]
 
-		# UMAP for Dimension reduction of tetras
-		sag_features = sag_normed_tetra_df.values
-		sag_targets = sag_normed_tetra_df.index.values
-		mg_features = mg_normed_tetra_df.values
-		mg_targets = mg_normed_tetra_df.index.values
-		normed_features = normed_tetra_df.values
-		normed_targets = normed_tetra_df.index.values
-		
-		print('[SAG+]: Dimension reduction of tetras with UMAP')
-		umap_trans = umap.UMAP(n_neighbors=2, min_dist=0.0,
-						n_components=num_components, metric='manhattan',
-						random_state=42
-						).fit_transform(normed_features)
+			# UMAP for Dimension reduction of tetras
+			sag_features = sag_normed_tetra_df.values
+			sag_targets = sag_normed_tetra_df.index.values
+			mg_features = mg_normed_tetra_df.values
+			mg_targets = mg_normed_tetra_df.index.values
+			normed_features = normed_tetra_df.values
+			normed_targets = normed_tetra_df.index.values
+			
+			print('[SAG+]: Dimension reduction of tetras with UMAP')
+			umap_trans = umap.UMAP(n_neighbors=2, min_dist=0.0,
+							n_components=num_components, metric='manhattan',
+							random_state=42
+							).fit_transform(normed_features)
 
-		pc_col_names = ['pc' + str(x) for x in range(1, num_components + 1)]
-		umap_df = pd.DataFrame(umap_trans, columns=pc_col_names, index=normed_targets)
+			pc_col_names = ['pc' + str(x) for x in range(1, num_components + 1)]
+			umap_df = pd.DataFrame(umap_trans, columns=pc_col_names, index=normed_targets)
 
-		print('[SAG+]: Calculating AIC/BIC')
-		sag_umap_df = umap_df.loc[umap_df.index.isin(sag_tetra_df.index)]
-		mg_umap_df = umap_df.loc[umap_df.index.isin(mg_tetra_df.index)]
-		n_components = np.arange(1, 100, 1)
-		models = [GMM(n, random_state=42)
-			  for n in n_components]
-		bics = []
-		aics = []
-		for i, model in enumerate(models):
-			n_comp = n_components[i]
-			try:
-				bic = model.fit(sag_umap_df.values,
-								sag_umap_df.index).bic(sag_umap_df.values
-								)
-				bics.append(bic)
-			except:
-				print('[WARNING]: BIC failed with %s components' % n_comp)
-			try:
-				aic = model.fit(sag_umap_df.values,
-								sag_umap_df.index).aic(sag_umap_df.values
-								)
-				aics.append(aic)
-			except:
-				print('[WARNING]: AIC failed with %s components' % n_comp)
+			print('[SAG+]: Calculating AIC/BIC')
+			sag_umap_df = umap_df.loc[umap_df.index.isin(sag_tetra_df.index)]
+			mg_umap_df = umap_df.loc[umap_df.index.isin(mg_tetra_df.index)]
+			n_components = np.arange(1, 100, 1)
+			models = [GMM(n, random_state=42)
+				  for n in n_components]
+			bics = []
+			aics = []
+			for i, model in enumerate(models):
+				n_comp = n_components[i]
+				try:
+					bic = model.fit(sag_umap_df.values,
+									sag_umap_df.index).bic(sag_umap_df.values
+									)
+					bics.append(bic)
+				except:
+					print('[WARNING]: BIC failed with %s components' % n_comp)
+				try:
+					aic = model.fit(sag_umap_df.values,
+									sag_umap_df.index).aic(sag_umap_df.values
+									)
+					aics.append(aic)
+				except:
+					print('[WARNING]: AIC failed with %s components' % n_comp)
 
-		min_bic_comp = n_components[bics.index(min(bics))]
-		min_aic_comp = n_components[aics.index(min(aics))]
-		print('[SAG+]: Min AIC/BIC at %s/%s, respectively' % 
-				(min_aic_comp, min_bic_comp)
-				)
-		print('[SAG+]: Using AIC as guide for GMM components')
-		print('[SAG+]: Training GMM on SAG tetras')
-		gmm = GMM(n_components=min_aic_comp, random_state=42
-						).fit(sag_umap_df.values, sag_umap_df.index
-						)
-		print('[SAG+]: GMM Converged: ', gmm.converged_)
-		sag_scores = gmm.score_samples(sag_umap_df.values)
-		sag_scores_df = pd.DataFrame(data=sag_scores, index=sag_targets)
-		sag_score_min = min(sag_scores_df.values)[0]
-		sag_score_max = max(sag_scores_df.values)[0]
-		mg_scores = gmm.score_samples(mg_umap_df.values)
-		mg_scores_df = pd.DataFrame(data=mg_scores, index=mg_targets)
-		gmm_keep_dict = {x.rsplit('_', 1)[0]:[] for x in mg_scores_df.index}
-		gmm_pass_df = mg_scores_df.loc[(mg_scores_df[0] >= sag_score_min) &
-										(mg_scores_df[0] <= sag_score_max)
-										]
-		gmm_pass_list = gmm_pass_df.index.values
+			min_bic_comp = n_components[bics.index(min(bics))]
+			min_aic_comp = n_components[aics.index(min(aics))]
+			print('[SAG+]: Min AIC/BIC at %s/%s, respectively' % 
+					(min_aic_comp, min_bic_comp)
+					)
+			print('[SAG+]: Using AIC as guide for GMM components')
+			print('[SAG+]: Training GMM on SAG tetras')
+			gmm = GMM(n_components=min_aic_comp, random_state=42
+							).fit(sag_umap_df.values, sag_umap_df.index
+							)
+			print('[SAG+]: GMM Converged: ', gmm.converged_)
+			sag_scores = gmm.score_samples(sag_umap_df.values)
+			sag_scores_df = pd.DataFrame(data=sag_scores, index=sag_targets)
+			sag_score_min = min(sag_scores_df.values)[0]
+			sag_score_max = max(sag_scores_df.values)[0]
+			mg_scores = gmm.score_samples(mg_umap_df.values)
+			mg_scores_df = pd.DataFrame(data=mg_scores, index=mg_targets)
+			gmm_keep_dict = {x.rsplit('_', 1)[0]:[] for x in mg_scores_df.index}
+			gmm_pass_df = mg_scores_df.loc[(mg_scores_df[0] >= sag_score_min) &
+											(mg_scores_df[0] <= sag_score_max)
+											]
+			gmm_pass_list = gmm_pass_df.index.values
+			print('[SAG+]: Recruited %s subcontigs to %s' %
+					(len(gmm_pass_list), sag_id)
+					)
+			with open(join(tra_path, sag_id + '.tra_recruits.tsv'), 'w') as tra_out:
+				tra_out.write('\n'.join(gmm_pass_list))
 		gmm_pass_dict[sag_id] = gmm_pass_list
-		print('[SAG+]: Recruited %s subcontigs to %s' %
-				(len(gmm_pass_list), sag_id)
-				)
-		with open(join(tra_path, sag_id + '.tra_recruits.tsv'), 'w') as tra_out:
-			tra_out.write('\n'.join(gmm_pass_list))
+
+	#####################################################################################
+	#####################################################################################
+	#####################################################################################
+	#####################################################################################
+
+
+	#####################################################################################
+	######################                                         ######################
+	###################### Collect the recruits and merge with SAG ######################
+	######################                                         ######################
+	#####################################################################################
+
+	for sag_id in sag_subcontigs_dict.keys():
+		gmm_pass_list = gmm_pass_dict[sag_id]
+		minhash_pass_list = minhash_pass_dict[sag_id]
+		final_pass_list = list(set(gmm_pass_list + minhash_pass_list))
+		with open(join(final_path, sag_id + '.final_recruits.fasta'), 'w') as final_out:
+			final_mgsubs_list = ['\n'.join(['>'+x[0], x[1]]) for x in mg_sub_tup
+								if x[0] is in final_pass_list
+								]
+			final_out.write('\n'.join(final_mgsubs_list))
+
+
+
 
 
 if __name__ == "__main__":
