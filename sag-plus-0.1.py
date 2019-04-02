@@ -9,6 +9,7 @@ import umap
 from sklearn.mixture import GaussianMixture as GMM
 from sklearn.preprocessing import normalize
 import numpy as np
+from collections import Counter
 
 
 
@@ -76,13 +77,14 @@ def tetra_cnt(seq_list):
 	# count up all tetramers and also populate the tetra dict
 	for seq in seq_list:
 		tmp_dict = {k: 0 for k, v in tetra_cnt_dict.items()}
-		total_kmer_cnt = 0
 		clean_seq = seq.strip('\n').lower()
 		kmer_list = [''.join(x) for x in get_kmer(clean_seq, 4)]
+		tetra_counter = Counter(kmer_list)
+		total_kmer_cnt = sum(tetra_counter.values())
+		# add counter to tmp_dict
 		for tetra in tmp_dict.keys():
-			count_tetra = kmer_list.count(tetra)
+			count_tetra = int(tetra_counter[tetra])
 			tmp_dict[tetra] = count_tetra
-			total_kmer_cnt += count_tetra
 		# map tetras to their reverse tetras (not compliment)
 		dedup_dict = {}
 		for tetra in tmp_dict.keys():
@@ -514,13 +516,9 @@ def main():
 		final_pass_list = list(set(gmm_pass_list + minhash_pass_list))
 		with open(join(final_path, sag_id + '.final_recruits.fasta'), 'w') as final_out:
 			final_mgsubs_list = ['\n'.join(['>'+x[0], x[1]]) for x in mg_sub_tup
-								if x[0] is in final_pass_list
-								]
+									if x[0] in final_pass_list
+									]
 			final_out.write('\n'.join(final_mgsubs_list))
-
-
-
-
 
 if __name__ == "__main__":
 	main()
