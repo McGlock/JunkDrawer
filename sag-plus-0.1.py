@@ -268,8 +268,9 @@ def main():
 
 	# Load comparisons OR Compare SAG sigs to MG sigs to find containment
 	print('[SAG+]: Comparing Signatures of SAGs to MetaG contigs')
-	sag_pass_dict = {}
-	minhash_pass_dict = {}
+	#sag_pass_dict = {}
+	#minhash_pass_dict = {}
+	minhash_pass_list = []
 	for sag_id, sag_sub_tup in sag_contigs_dict.items():
 		if isfile(join(mhr_path, sag_id + '.mhr_recruits.tsv')):
 			print('[SAG+]: Loading  %s and MetaG signature recruit list' % sag_id)
@@ -293,17 +294,25 @@ def main():
 					sourmash.signature.save_signatures([sag_sig], fp=sags_out)
 			print('[SAG+]: Comparing  %s and MetaG signatures' % sag_id)
 			pass_list = []
-			sag_sig = sag_sig_dict[sag_id]
+			mg_sig_list = list(mg_sig_list)
 			for j, mg_sig in enumerate(mg_sig_list):
 				jacc_sim = mg_sig.contained_by(sag_sig)
+				mg_nm = mg_sig.name()
 				if jacc_sim >= 1.0:
-					pass_list.append((sag_id, mg_sig.name()))
+					pass_list.append([sag_id, mg_nm, mg_nm.rsplit('_', 1)[0], '1'])
+				else:
+					pass_list.append([sag_id, mg_nm, mg_nm.rsplit('_', 1)[0], '0'])
 			with open(join(mhr_path, sag_id + '.mhr_recruits.tsv'), 'w') as mhr_out:
 				mhr_out.write('\n'.join(['\t'.join(x) for x in pass_list]))
-		contig_pass_list = [x[1].rsplit('_', 1)[0] for x in pass_list]
-		sag_pass_dict[sag_id] = contig_pass_list
-		minhash_pass_dict[sag_id] = [x[1] for x in pass_list]
-		print('[SAG+]: Recruited %s subcontigs to %s' % (len(pass_list), sag_id))
+		#contig_pass_list = [x[1].rsplit('_', 1)[0] for x in pass_list]
+		#sag_pass_dict[sag_id] = contig_pass_list
+		#minhash_pass_dict[sag_id] = [x[1] for x in pass_list]
+		minhash_pass_list.extend(pass_list)
+		print('[SAG+]: Recruited subcontigs to %s' % sag_id)
+
+	minhash_df = pd.DataFrame(minhash_pass_list, columns=['sag_id', 'subcontig_id',
+															'contig_id', 'minhash'
+															])
 
 	#####################################################################################
 	#####################################################################################
@@ -333,10 +342,15 @@ def main():
 	mg_rpkm_trim_df.set_index('Sequence_name', inplace=True)
 
 	# get MinHash "passed" mg rpkms
-	rpkm_stats_dict = {}
-	for sag_id, contig_pass_list in sag_pass_dict.items():
+	#rpkm_stats_dict = {}
+	rpkm_pass_list = []
+	for sag_id in set(recruit_df['sag_id']):
 		print('[SAG+]: Calulating/Loading RPKM stats for %s' % sag_id)
-		mg_rpkm_pass_df = mg_rpkm_trim_df[mg_rpkm_trim_df.index.isin(contig_pass_list)]
+		sag_mh_pass_df = recruit_df.loc[(recruit_df['sag_id'] == sag_id) &
+										(recruit_df['minhash'] == '1')
+										]
+		mh_contig_pass_list = set(sag_mh_pass_df['contig_id'])
+		mg_rpkm_pass_df = mg_rpkm_trim_df[mg_rpkm_trim_df.index.isin(mh_contig_pass_list)]
 		mg_rpkm_pass_stat_df = mg_rpkm_pass_df.mean().reset_index()
 		mg_rpkm_pass_stat_df.columns = ['sample_id', 'mean']
 		mg_rpkm_pass_stat_df['std'] = list(mg_rpkm_pass_df.std())
@@ -349,19 +363,26 @@ def main():
 		iqr_pass_df = mg_rpkm_trim_df.copy()
 		for i, col_nm in enumerate(mg_rpkm_trim_df.columns):
 			pass_stats = mg_rpkm_pass_stat_df.iloc[[i]]
-			pass_min = pass_stats['IQ_10'].values[0]
-			pass_max = pass_stats['IQ_90'].values[0]
+			pass_min = pass_stats['IQ_25'].values[0]
+			pass_max = pass_stats['IQ_75'].values[0]
 			iqr_pass_df = iqr_pass_df.loc[(iqr_pass_df[col_nm] >= pass_min) &
 											(iqr_pass_df[col_nm] <= pass_max)
 											]
-		contig_pass_list.extend(iqr_pass_df.index.values)
-		iqr_set_list = list(set(contig_pass_list))
-		rpkm_stats_dict[sag_id] = iqr_set_list
+		print(iqr_pass_df.head())
+		pass_list = []
+		for mg_id in mg_rpkm_trim_df.index.values:
+			if mg_id in iqr_pass_df.index.values:
+				pass_list.append([sag_id, x, '1'])
+			else:
+				pass_list.append([sag_id, x, '0'])
+		rpkm_pass_list.extend(pass_list)
 		print('[SAG+]: Recruited %s subcontigs to %s' %
 				(len(iqr_set_list), sag_id)
 				)
 		with open(join(ara_path, sag_id + '.ara_recruits.tsv'), 'w') as ara_out:
 			ara_out.write('\n'.join(iqr_set_list))
+
+	rpkm_df = pd.DataFrame(rpkm_pass_list, columns=['sag_id', 'contig_id', 'rpkm'])
 
 	#####################################################################################
 	#####################################################################################
@@ -380,6 +401,7 @@ def main():
 	for sag_id, sag_sub_tup in sag_subcontigs_dict.items():
 		sag_headers = sag_sub_tup[0]
 		sag_subs = sag_sub_tup[1]
+		sag_tetra_df_list = []
 		if isfile(join(tra_path, sag_id + '.tetras.tsv')):
 			print('[SAG+]: Loading tetramer Hz matrix for %s' % sag_id)
 			sag_tetra_df = pd.read_csv(join(tra_path, sag_id + '.tetras.tsv'),
@@ -390,7 +412,22 @@ def main():
 			sag_tetra_df['contig_id'] = sag_headers
 			sag_tetra_df.set_index('contig_id', inplace=True)
 			sag_tetra_df.to_csv(join(tra_path, sag_id + '.tetras.tsv'), sep='\t')
+		sag_tetra_df_list.append(sag_tetra_df)
 
+	if isfile(join(tra_path, mg_id + '.tetras.tsv')):
+		print('[SAG+]: Loading tetramer Hz matrix for %s' % mg_id)
+		mg_tetra_df = pd.read_csv(join(tra_path, mg_id + '.tetras.tsv'),
+									sep='\t',index_col=0, header=0
+									)
+	else:
+		print('[SAG+]: Calculating tetramer Hz matrix for %s' % mg_id)
+		mg_tetra_df = pd.DataFrame.from_dict(tetra_cnt(mg_subs))
+		mg_tetra_df['contig_id'] = mg_headers
+		mg_tetra_df.set_index('contig_id', inplace=True)
+		mg_tetra_df.to_csv(join(tra_path, mg_id + '.tetras.tsv'),
+							sep='\t'
+							)
+		'''
 		if isfile(join(tra_path, mg_id + '.' + sag_id + '.tetras.tsv')):
 			print('[SAG+]: Loading tetramer Hz matrix for %s' % mg_id + '.' + sag_id)
 			mg_tetra_df = pd.read_csv(join(tra_path, mg_id + '.' + sag_id + '.tetras.tsv'),
@@ -408,6 +445,8 @@ def main():
 			mg_tetra_df.to_csv(join(tra_path, mg_id + '.' + sag_id + '.tetras.tsv'),
 								sep='\t'
 								)
+		'''
+	sys.exit()
 		if isfile(join(tra_path, sag_id + '.tra_recruits.tsv')):
 			print('[SAG+]: Loading  %s tetramer Hz recruit list' % sag_id)
 			with open(join(tra_path, sag_id + '.tra_recruits.tsv'), 'r') as tra_in:
@@ -511,9 +550,11 @@ def main():
 	#####################################################################################
 
 	for sag_id in sag_subcontigs_dict.keys():
+		print('[SAG+]: Collecting all recruits from entire analysis of %s' % sag_id)
 		gmm_pass_list = gmm_pass_dict[sag_id]
 		minhash_pass_list = minhash_pass_dict[sag_id]
-		final_pass_list = list(set(gmm_pass_list + minhash_pass_list))
+		merge_list = gmm_pass_list + minhash_pass_list
+		final_pass_list = list(set(merge_list))
 		with open(join(final_path, sag_id + '.final_recruits.fasta'), 'w') as final_out:
 			final_mgsubs_list = ['\n'.join(['>'+x[0], x[1]]) for x in mg_sub_tup
 									if x[0] in final_pass_list
