@@ -275,7 +275,7 @@ def main():
 		if isfile(join(mhr_path, sag_id + '.mhr_recruits.tsv')):
 			print('[SAG+]: Loading  %s and MetaG signature recruit list' % sag_id)
 			with open(join(mhr_path, sag_id + '.mhr_recruits.tsv'), 'r') as mhr_in:
-				pass_list = [x.split('\t') for x in mhr_in.readlines()]
+				pass_list = [x.rstrip('\n').split('\t') for x in mhr_in.readlines()]
 		else:
 			# Calculate\Load MinHash Signatures with SourMash for SAG subseqs
 			if isfile(join(sig_path, sag_id + '.SAG.sig')):
@@ -325,7 +325,7 @@ def main():
 	##########################                                 ##########################
 	#####################################################################################
 	# NOTE: This is built to accept output from 'join_rpkm_out.py' script
-	# TODO: rebuild this algorithm to accept standard output from 'rpkm'
+	# TODO: Add RPKM cmd call to run within this script
 	print('[SAG+]: Starting Abundance Recruitment Algorithm')
 
 	print('[SAG+]: Loading RPKM values for %s' % mg_id)
@@ -360,8 +360,8 @@ def main():
 		iqr_pass_df = mg_rpkm_trim_df.copy()
 		for i, col_nm in enumerate(mg_rpkm_trim_df.columns):
 			pass_stats = mg_rpkm_pass_stat_df.iloc[[i]]
-			pass_min = pass_stats['IQ_10'].values[0]
-			pass_max = pass_stats['IQ_90'].values[0]
+			pass_min = pass_stats['IQ_25'].values[0]
+			pass_max = pass_stats['IQ_75'].values[0]
 			iqr_pass_df = iqr_pass_df.loc[(iqr_pass_df[col_nm] >= pass_min) &
 											(iqr_pass_df[col_nm] <= pass_max)
 											]
@@ -411,7 +411,7 @@ def main():
 		if isfile(join(tra_path, sag_id + '.tra_recruits.tsv')):
 			print('[SAG+]: Loading  %s tetramer Hz recruit list' % sag_id)
 			with open(join(tra_path, sag_id + '.tra_recruits.tsv'), 'r') as tra_in:
-				gmm_pass_list = [x for x in tra_in.readlines()]
+				gmm_pass_list = [x.rstrip('\n') for x in tra_in.readlines()]
 		else:
 			if isfile(join(tra_path, sag_id + '.tetras.tsv')):
 				print('[SAG+]: Loading tetramer Hz matrix for %s' % sag_id)
@@ -458,43 +458,41 @@ def main():
 	pc_col_names = ['pc' + str(x) for x in range(1, num_components + 1)]
 	umap_df = pd.DataFrame(umap_trans, columns=pc_col_names, index=normed_targets)
 
-	print('[SAG+]: Calculating AIC/BIC')
 	sag_umap_df = umap_df.loc[umap_df.index.isin(sag_index_list)]
 	mg_umap_df = umap_df.loc[umap_df.index.isin(mg_tetra_df.index)]
-	n_components = np.arange(1, 100, 1)
-	models = [GMM(n, random_state=42)
-		  for n in n_components]
-	bics = []
-	aics = []
-	for i, model in enumerate(models):
-		n_comp = n_components[i]
-		try:
-			bic = model.fit(sag_umap_df.values,
-							sag_umap_df.index).bic(sag_umap_df.values
-							)
-			bics.append(bic)
-		except:
-			print('[WARNING]: BIC failed with %s components' % n_comp)
-		try:
-			aic = model.fit(sag_umap_df.values,
-							sag_umap_df.index).aic(sag_umap_df.values
-							)
-			aics.append(aic)
-		except:
-			print('[WARNING]: AIC failed with %s components' % n_comp)
-
-	min_bic_comp = n_components[bics.index(min(bics))]
-	min_aic_comp = n_components[aics.index(min(aics))]
-	print('[SAG+]: Min AIC/BIC at %s/%s, respectively' % 
-			(min_aic_comp, min_bic_comp)
-			)
-	print('[SAG+]: Using AIC as guide for GMM components')
-	print('[SAG+]: Training GMM on SAG tetras')
-	# TODO: loop through SAGs one at a time?
-	#gmm_pass_dict = {}
 	gmm_pass_list = []
 	for sag_id, sag_tetra_df in sag_tetra_df_dict.items():
+		print('[SAG+]: Calculating AIC/BIC for %s GMM' % sag_id)
 		single_sag_umap_df = sag_umap_df.loc[sag_umap_df.index.isin(sag_tetra_df.index)]
+		n_components = np.arange(1, 100, 1)
+		models = [GMM(n, random_state=42)
+			  for n in n_components]
+		bics = []
+		aics = []
+		for i, model in enumerate(models):
+			n_comp = n_components[i]
+			try:
+				bic = model.fit(single_sag_umap_df.values,
+								single_sag_umap_df.index).bic(single_sag_umap_df.values
+								)
+				bics.append(bic)
+			except:
+				print('[WARNING]: BIC failed with %s components' % n_comp)
+			try:
+				aic = model.fit(single_sag_umap_df.values,
+								single_sag_umap_df.index).aic(single_sag_umap_df.values
+								)
+				aics.append(aic)
+			except:
+				print('[WARNING]: AIC failed with %s components' % n_comp)
+
+		min_bic_comp = n_components[bics.index(min(bics))]
+		min_aic_comp = n_components[aics.index(min(aics))]
+		print('[SAG+]: Min AIC/BIC at %s/%s, respectively' % 
+				(min_aic_comp, min_bic_comp)
+				)
+		print('[SAG+]: Using AIC as guide for GMM components')
+		print('[SAG+]: Training GMM on SAG tetras')
 		gmm = GMM(n_components=min_aic_comp, random_state=42
 						).fit(single_sag_umap_df.values, single_sag_umap_df.index
 						)
@@ -505,7 +503,6 @@ def main():
 		sag_score_max = max(sag_scores_df.values)[0]
 		mg_scores = gmm.score_samples(mg_umap_df.values)
 		mg_scores_df = pd.DataFrame(data=mg_scores, index=mg_targets)
-		gmm_keep_dict = {x.rsplit('_', 1)[0]:[] for x in mg_scores_df.index}
 		gmm_pass_df = mg_scores_df.loc[(mg_scores_df[0] >= sag_score_min) &
 										(mg_scores_df[0] <= sag_score_max)
 										]
