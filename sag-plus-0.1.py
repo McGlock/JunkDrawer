@@ -10,6 +10,7 @@ from sklearn.mixture import GaussianMixture as GMM
 from sklearn.preprocessing import normalize
 import numpy as np
 from collections import Counter
+from subprocess import Popen, PIPE
 
 
 
@@ -147,6 +148,8 @@ def main():
 	ara_path = join(save_path, 'rpkm_recruits')
 	tra_path = join(save_path, 'tetra_recruits')
 	final_path = join(save_path, 'final_recruits')
+	asm_path = join(save_path, 're-assembled')
+
 
 	contig_tax_map = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/gsa_mapping_pool.binning.trimmed'
 	sag_tax_map = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/genome_taxa_info.tsv'
@@ -169,6 +172,8 @@ def main():
 		makedirs(tra_path)
 	if not path.exists(final_path):
 		makedirs(final_path)
+	if not path.exists(asm_path):
+		makedirs(asm_path)
 
 
 	# Find the SAGs!
@@ -244,8 +249,6 @@ def main():
 	########################### MinHash Recruitment Algorithm ###########################
 	###########################                               ###########################
 	#####################################################################################
-	# TODO: only load sigs if the recruit files are missing
-	# TODO: remove sag_id column in save file
 	print('[SAG+]: Starting MinHash Recruitment Algorithm')
 
 	# Calculate/Load MinHash Signatures with SourMash for MG subseqs
@@ -268,8 +271,6 @@ def main():
 
 	# Load comparisons OR Compare SAG sigs to MG sigs to find containment
 	print('[SAG+]: Comparing Signatures of SAGs to MetaG contigs')
-	#sag_pass_dict = {}
-	#minhash_pass_dict = {}
 	minhash_pass_list = []
 	for sag_id, sag_sub_tup in sag_contigs_dict.items():
 		if isfile(join(mhr_path, sag_id + '.mhr_recruits.tsv')):
@@ -303,9 +304,6 @@ def main():
 
 			with open(join(mhr_path, sag_id + '.mhr_recruits.tsv'), 'w') as mhr_out:
 				mhr_out.write('\n'.join(['\t'.join(x) for x in pass_list]))
-		#contig_pass_list = [x[1].rsplit('_', 1)[0] for x in pass_list]
-		#sag_pass_dict[sag_id] = contig_pass_list
-		#minhash_pass_dict[sag_id] = [x[1] for x in pass_list]
 		minhash_pass_list.extend(pass_list)
 		print('[SAG+]: Recruited subcontigs to %s' % sag_id)
 
@@ -341,7 +339,6 @@ def main():
 	mg_rpkm_trim_df.set_index('Sequence_name', inplace=True)
 
 	# get MinHash "passed" mg rpkms
-	#rpkm_stats_dict = {}
 	rpkm_pass_list = []
 	for sag_id in set(minhash_df['sag_id']):
 		print('[SAG+]: Calulating/Loading RPKM stats for %s' % sag_id)
@@ -524,7 +521,7 @@ def main():
 				tra_out.write('\n'.join(['\t'.join(x) for x in pass_list]))
 		gmm_pass_list.extend(pass_list)
 	gmm_df = pd.DataFrame(gmm_pass_list, columns=['sag_id', 'subcontig_id', 'contig_id'])
-	sys.exit()
+
 	#####################################################################################
 	#####################################################################################
 	#####################################################################################
@@ -536,18 +533,94 @@ def main():
 	###################### Collect the recruits and merge with SAG ######################
 	######################                                         ######################
 	#####################################################################################
-
-	for sag_id in sag_subcontigs_dict.keys():
-		print('[SAG+]: Collecting all recruits from entire analysis of %s' % sag_id)
-		gmm_pass_list = gmm_pass_dict[sag_id]
-		minhash_pass_list = minhash_pass_dict[sag_id]
-		merge_list = gmm_pass_list + minhash_pass_list
-		final_pass_list = list(set(merge_list))
+	# TODO: assign each MG contig to only one SAG at most based on subcontig recruits?
+	# TODO: co-assemble SAG and recruited subcontigs
+	# Merge MinHash and GMM Tetra (passed first by RPKM)
+	mh_gmm_merge_df = minhash_df.merge(gmm_df, how='outer',
+										on=['sag_id', 'subcontig_id', 'contig_id']
+										)
+	mh_gmm_merge_df.to_csv(join(final_path, 'final_recruits.tsv'), sep='\t', index=True)
+	# Count # of subcontigs recruited to each SAG
+	mh_gmm_cnt_df = mh_gmm_merge_df.groupby(['sag_id', 'contig_id']).count().reset_index()
+	mh_gmm_cnt_df.columns = ['sag_id', 'contig_id', 'subcontig_recruits']
+	# Build subcontig count for each MG contig
+	mg_contig_list = [x.rsplit('_', 1)[0] for x in mg_headers]
+	mg_tot_df = pd.DataFrame(zip(mg_contig_list, mg_headers),
+									columns=['contig_id', 'subcontig_id'])
+	mg_tot_cnt_df = mg_tot_df.groupby(['contig_id']).count().reset_index()
+	mg_tot_cnt_df.columns = ['contig_id', 'subcontig_total']
+	mg_recruit_df = mh_gmm_cnt_df.merge(mg_tot_cnt_df, how='left', on='contig_id')
+	mg_recruit_df['percent_recruited'] = mg_recruit_df['subcontig_recruits'] / \
+											mg_recruit_df['subcontig_total']
+	mg_recruit_df.sort_values(by='percent_recruited', ascending=False, inplace=True)
+	# Only pass contigs that have the magjority of subcontigs recruited (>= 51%)
+	mg_recruit_filter_df = mg_recruit_df.loc[mg_recruit_df['percent_recruited'] >= 0.51]
+	mg_contig_per_max_df = mg_recruit_filter_df.groupby(['contig_id'])[
+											'percent_recruited'].max().reset_index()
+	mg_contig_per_max_df.columns = ['contig_id', 'percent_max']
+	mg_recruit_max_df = mg_recruit_filter_df.merge(mg_contig_per_max_df, how='left',
+													on='contig_id')
+	# Now pass contigs that have the maximum recruit % of subcontigs
+	mg_max_only_df = mg_recruit_max_df.loc[mg_recruit_max_df['percent_recruited'] >=
+											mg_recruit_max_df['percent_max']
+											]
+	mg_sub_df = pd.DataFrame(mg_sub_tup, columns=['subcontig_id', 'seq'])
+	for sag_id in set(mg_max_only_df['sag_id']):
+		sub_merge_df = mh_gmm_merge_df.loc[mh_gmm_merge_df['sag_id'] == sag_id]
+		sub_filter_df = mg_max_only_df.loc[mg_max_only_df['sag_id'] == sag_id]
+		sub_final_df = sub_merge_df.loc[sub_merge_df['contig_id'
+										].isin(sub_filter_df['contig_id'])
+										]
+		print('[SAG+]: Recruited %s subcontigs from entire analysis for %s' % 
+				(sub_final_df.shape[0], sag_id)
+				)
 		with open(join(final_path, sag_id + '.final_recruits.fasta'), 'w') as final_out:
-			final_mgsubs_list = ['\n'.join(['>'+x[0], x[1]]) for x in mg_sub_tup
-									if x[0] in final_pass_list
+			mg_sub_filter_df = mg_sub_df.loc[mg_sub_df['subcontig_id'
+												].isin(sub_final_df['subcontig_id'])
+												]
+			final_mgsubs_list = ['\n'.join(['>'+x[0], x[1]]) for x in
+									zip(mg_sub_filter_df['subcontig_id'],
+										mg_sub_filter_df['seq']
+										)
 									]
 			final_out.write('\n'.join(final_mgsubs_list))
+		# Use minimus2 to merge the SAG and the recruits into one assembly
+		toAmos_cmd = ['/home/rmclaughlin/bin/amos-3.1.0/bin/toAmos', '-s',
+						join(final_path, sag_id + '.final_recruits.fasta'), '-o',
+						join(asm_path, sag_id + '.afg')
+						]
+		run_toAmos = Popen(toAmos_cmd, stdout=PIPE)
+		print(run_toAmos.communicate())
+		minimus_cmd = ['/home/rmclaughlin/bin/amos-3.1.0/bin/minimus2',
+						join(asm_path, sag_id),
+						'-D', 'REFCOUNT=0', '-D', 'OVERLAP=200', '-D', 'MINID=95'
+						]
+		run_minimus = Popen(minimus_cmd, stdout=PIPE)
+		print(run_minimus.communicate())
+		
+		clean_cmd = ['rm', '-r', join(asm_path, sag_id + '.runAmos.log'),
+						join(asm_path, sag_id + '.afg'),
+						join(asm_path, sag_id + '.OVL'),
+						join(asm_path, sag_id + '.singletons'),
+						join(asm_path, sag_id + '.contig'),
+						join(asm_path, sag_id + '.ovl'),
+						join(asm_path, sag_id + '.coords'),
+						join(asm_path, sag_id + '.qry.seq'),
+						join(asm_path, sag_id + '.delta'),
+						join(asm_path, sag_id + '.bnk'),
+						join(asm_path, sag_id + '.ref.seq')
+						]
+		run_clean = Popen(clean_cmd, stdout=PIPE)
+		print(run_clean.communicate())
+		
+		# Run CheckM on all new rebuilt/updated SAGs
+		#checkm lineage_wf --tab_table -x fasta --threads 8 --pplacer_threads 8 ./ ./checkM_output/ > ./checkM_stdout.tsv
+
+
+
+
+
+
 
 if __name__ == "__main__":
 	main()
