@@ -148,7 +148,10 @@ def main():
 	ara_path = join(save_path, 'rpkm_recruits')
 	tra_path = join(save_path, 'tetra_recruits')
 	final_path = join(save_path, 'final_recruits')
+	ext_path = join(save_path, 'extend_SAGs')
 	asm_path = join(save_path, 're-assembled')
+	check_path = join(save_path, 'checkM')
+
 
 
 	contig_tax_map = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/gsa_mapping_pool.binning.trimmed'
@@ -172,8 +175,12 @@ def main():
 		makedirs(tra_path)
 	if not path.exists(final_path):
 		makedirs(final_path)
+	if not path.exists(ext_path):
+		makedirs(ext_path)
 	if not path.exists(asm_path):
 		makedirs(asm_path)
+	if not path.exists(check_path):
+		makedirs(check_path)
 
 
 	# Find the SAGs!
@@ -533,13 +540,14 @@ def main():
 	###################### Collect the recruits and merge with SAG ######################
 	######################                                         ######################
 	#####################################################################################
-	# TODO: assign each MG contig to only one SAG at most based on subcontig recruits?
-	# TODO: co-assemble SAG and recruited subcontigs
+	# TODO: Use full contigs instead of subcontigs for co-asm, reduces asm time for Minimus2? CISA?
+	# TODO: check for co-asm files before running
 	# Merge MinHash and GMM Tetra (passed first by RPKM)
 	mh_gmm_merge_df = minhash_df.merge(gmm_df, how='outer',
 										on=['sag_id', 'subcontig_id', 'contig_id']
 										)
 	mh_gmm_merge_df.to_csv(join(final_path, 'final_recruits.tsv'), sep='\t', index=True)
+	'''
 	# Count # of subcontigs recruited to each SAG
 	mh_gmm_cnt_df = mh_gmm_merge_df.groupby(['sag_id', 'contig_id']).count().reset_index()
 	mh_gmm_cnt_df.columns = ['sag_id', 'contig_id', 'subcontig_recruits']
@@ -555,6 +563,7 @@ def main():
 	mg_recruit_df.sort_values(by='percent_recruited', ascending=False, inplace=True)
 	# Only pass contigs that have the magjority of subcontigs recruited (>= 51%)
 	mg_recruit_filter_df = mg_recruit_df.loc[mg_recruit_df['percent_recruited'] >= 0.51]
+	
 	mg_contig_per_max_df = mg_recruit_filter_df.groupby(['contig_id'])[
 											'percent_recruited'].max().reset_index()
 	mg_contig_per_max_df.columns = ['contig_id', 'percent_max']
@@ -564,19 +573,17 @@ def main():
 	mg_max_only_df = mg_recruit_max_df.loc[mg_recruit_max_df['percent_recruited'] >=
 											mg_recruit_max_df['percent_max']
 											]
+	'''
 	mg_sub_df = pd.DataFrame(mg_sub_tup, columns=['subcontig_id', 'seq'])
-	for sag_id in set(mg_max_only_df['sag_id']):
+	mg_sub_df['contig_id'] = [x.rsplit('_', 1)[0] for x in mg_sub_df['subcontig_id']]
+	for sag_id in set(mh_gmm_merge_df['sag_id']):
 		sub_merge_df = mh_gmm_merge_df.loc[mh_gmm_merge_df['sag_id'] == sag_id]
-		sub_filter_df = mg_max_only_df.loc[mg_max_only_df['sag_id'] == sag_id]
-		sub_final_df = sub_merge_df.loc[sub_merge_df['contig_id'
-										].isin(sub_filter_df['contig_id'])
-										]
 		print('[SAG+]: Recruited %s subcontigs from entire analysis for %s' % 
-				(sub_final_df.shape[0], sag_id)
+				(sub_merge_df.shape[0], sag_id)
 				)
 		with open(join(final_path, sag_id + '.final_recruits.fasta'), 'w') as final_out:
-			mg_sub_filter_df = mg_sub_df.loc[mg_sub_df['subcontig_id'
-												].isin(sub_final_df['subcontig_id'])
+			mg_sub_filter_df = mg_sub_df.loc[mg_sub_df['contig_id'
+												].isin(sub_merge_df['contig_id'])
 												]
 			final_mgsubs_list = ['\n'.join(['>'+x[0], x[1]]) for x in
 									zip(mg_sub_filter_df['subcontig_id'],
@@ -584,20 +591,29 @@ def main():
 										)
 									]
 			final_out.write('\n'.join(final_mgsubs_list))
+		# Combine SAG and final recruits
+		with open(join(ext_path, sag_id + '.extend_SAG.fasta'), 'w') as cat_file:
+			data = []			
+			with open(join(mocksag_path, sag_id + '.mockSAG.fasta'), 'r') as sag_in:
+				data.extend(sag_in.readlines())
+			with open(join(final_path, sag_id + '.final_recruits.fasta'), 'r') as \
+				recruits_in:
+				data.extend(recruits_in.readlines())
+			join_data = '\n'.join(data).replace('\n\n', '\n')
+			cat_file.write(join_data)
 		# Use minimus2 to merge the SAG and the recruits into one assembly
 		toAmos_cmd = ['/home/rmclaughlin/bin/amos-3.1.0/bin/toAmos', '-s',
-						join(final_path, sag_id + '.final_recruits.fasta'), '-o',
+						join(ext_path, sag_id + '.extend_SAG.fasta'), '-o',
 						join(asm_path, sag_id + '.afg')
 						]
 		run_toAmos = Popen(toAmos_cmd, stdout=PIPE)
-		print(run_toAmos.communicate())
+		print(run_toAmos.communicate()[0].decode())
 		minimus_cmd = ['/home/rmclaughlin/bin/amos-3.1.0/bin/minimus2',
 						join(asm_path, sag_id),
 						'-D', 'REFCOUNT=0', '-D', 'OVERLAP=200', '-D', 'MINID=95'
 						]
 		run_minimus = Popen(minimus_cmd, stdout=PIPE)
-		print(run_minimus.communicate())
-		
+		print(run_minimus.communicate()[0].decode())
 		clean_cmd = ['rm', '-r', join(asm_path, sag_id + '.runAmos.log'),
 						join(asm_path, sag_id + '.afg'),
 						join(asm_path, sag_id + '.OVL'),
@@ -611,17 +627,16 @@ def main():
 						join(asm_path, sag_id + '.ref.seq')
 						]
 		run_clean = Popen(clean_cmd, stdout=PIPE)
-		print(run_clean.communicate())
+		print(run_clean.communicate()[0].decode())
+	
+	# Run CheckM on all new rebuilt/updated SAGs
+	checkm_cmd = ['checkm', 'lineage_wf', '--tab_table', '-x',
+					'fasta', '--threads', '8', '--pplacer_threads', '8', '-f',
+					join(check_path, 'checkM_stdout.tsv'), asm_path, check_path
+					]
+	run_checkm = Popen(checkm_cmd, stdout=PIPE)
+	print(run_checkm.communicate()[0].decode())
 		
-		# Run CheckM on all new rebuilt/updated SAGs
-		#checkm lineage_wf --tab_table -x fasta --threads 8 --pplacer_threads 8 ./ ./checkM_output/ > ./checkM_stdout.tsv
-
-
-
-
-
-
-
 if __name__ == "__main__":
 	main()
 
