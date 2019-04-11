@@ -187,12 +187,13 @@ def main():
 	if isdir(sag_path):
 		print('[SAG+]: Directory specified, looking for SAGs')
 		sag_list = [join(sag_path, f) for f in
-					listdir(sag_path) if (f.split('.')[-1] == 'fasta' or f.split('.')[-1] == 'fna')
+					listdir(sag_path) if (f.split('.')[-1] == 'fasta' or
+					f.split('.')[-1] == 'fna')
 					]
 	elif isfile(sag_path):
 		print('[SAG+]: File specified, processing %s' % basename(sag_path))
 		sag_list = [sag_path]
-
+	# TODO: subcontig function has issue with trailing kmers, needs to stop at last 10K
 	# Build Mock SAGs (for testing only), else extract all SAG contigs and headers
 	test = True
 	print('[SAG+]: Loading/Building subcontigs for all SAGs')
@@ -331,6 +332,8 @@ def main():
 	#####################################################################################
 	# NOTE: This is built to accept output from 'join_rpkm_out.py' script
 	# TODO: Add RPKM cmd call to run within this script
+	# TODO: OR impliment Salmon TPM calculation software?
+	# TODO: Limit MinHash pass list to contigs with >= 0.51 subcontigs recruited
 	print('[SAG+]: Starting Abundance Recruitment Algorithm')
 
 	print('[SAG+]: Loading RPKM values for %s' % mg_id)
@@ -344,18 +347,42 @@ def main():
 											!= 'UNMAPPED'
 											]
 	mg_rpkm_trim_df.set_index('Sequence_name', inplace=True)
-
+	# Count # of subcontigs recruited to each SAG
+	mh_cnt_df = minhash_df.groupby(['sag_id', 'contig_id']).count().reset_index()
+	mh_cnt_df.columns = ['sag_id', 'contig_id', 'subcontig_recruits']
+	# Build subcontig count for each MG contig
+	mg_contig_list = [x.rsplit('_', 1)[0] for x in mg_headers]
+	mg_tot_df = pd.DataFrame(zip(mg_contig_list, mg_headers),
+									columns=['contig_id', 'subcontig_id'])
+	mg_tot_cnt_df = mg_tot_df.groupby(['contig_id']).count().reset_index()
+	mg_tot_cnt_df.columns = ['contig_id', 'subcontig_total']
+	mg_recruit_df = mh_cnt_df.merge(mg_tot_cnt_df, how='left', on='contig_id')
+	mg_recruit_df['percent_recruited'] = mg_recruit_df['subcontig_recruits'] / \
+											mg_recruit_df['subcontig_total']
+	mg_recruit_df.sort_values(by='percent_recruited', ascending=False, inplace=True)
+	# Only pass contigs that have the magjority of subcontigs recruited (>= 51%)
+	mg_recruit_filter_df = mg_recruit_df.loc[mg_recruit_df['percent_recruited'] >= 0.51]
+	
+	mg_contig_per_max_df = mg_recruit_filter_df.groupby(['contig_id'])[
+											'percent_recruited'].max().reset_index()
+	mg_contig_per_max_df.columns = ['contig_id', 'percent_max']
+	mg_recruit_max_df = mg_recruit_filter_df.merge(mg_contig_per_max_df, how='left',
+													on='contig_id')
+	# Now pass contigs that have the maximum recruit % of subcontigs
+	mg_max_only_df = mg_recruit_max_df.loc[mg_recruit_max_df['percent_recruited'] >=
+											mg_recruit_max_df['percent_max']
+											]
 	# get MinHash "passed" mg rpkms
 	rpkm_pass_list = []
-	for sag_id in set(minhash_df['sag_id']):
+	for sag_id in set(mg_max_only_df['sag_id']):
 		print('[SAG+]: Calulating/Loading RPKM stats for %s' % sag_id)
 		if isfile(join(ara_path, sag_id + '.ara_recruits.tsv')):
 			with open(join(ara_path, sag_id + '.ara_recruits.tsv'), 'r') as ara_in:
 				pass_list = [x.rstrip('\n').split('\t') for x in ara_in.readlines()]
 		else:
-			sag_mh_pass_df = minhash_df[minhash_df['sag_id'] == sag_id]
-			mh_contig_pass_list = set(sag_mh_pass_df['contig_id'])
-			mg_rpkm_pass_df = mg_rpkm_trim_df[mg_rpkm_trim_df.index.isin(mh_contig_pass_list)]
+			sag_mh_pass_df = mg_max_only_df[mg_max_only_df['sag_id'] == sag_id]
+			mh_cntg_pass_list = set(sag_mh_pass_df['contig_id'])
+			mg_rpkm_pass_df = mg_rpkm_trim_df[mg_rpkm_trim_df.index.isin(mh_cntg_pass_list)]
 			mg_rpkm_pass_stat_df = mg_rpkm_pass_df.mean().reset_index()
 			mg_rpkm_pass_stat_df.columns = ['sample_id', 'mean']
 			mg_rpkm_pass_stat_df['std'] = list(mg_rpkm_pass_df.std())
@@ -371,14 +398,14 @@ def main():
 			iqr_pass_df = mg_rpkm_trim_df.copy()
 			for i, col_nm in enumerate(mg_rpkm_trim_df.columns):
 				pass_stats = mg_rpkm_pass_stat_df.iloc[[i]]
-				pass_min = pass_stats['IQ_05'].values[0]
-				pass_max = pass_stats['IQ_95'].values[0]
+				pass_min = pass_stats['IQ_25'].values[0]
+				pass_max = pass_stats['IQ_75'].values[0]
 				iqr_pass_df = iqr_pass_df.loc[(iqr_pass_df[col_nm] >= pass_min) &
 												(iqr_pass_df[col_nm] <= pass_max)
 												]
 			pass_list = []
 			for md_nm in mg_rpkm_trim_df.index.values:
-				if ((md_nm in iqr_pass_df.index.values) or (md_nm in mh_contig_pass_list)):
+				if ((md_nm in iqr_pass_df.index.values) or (md_nm in mh_cntg_pass_list)):
 					pass_list.append([sag_id, md_nm])
 			print('[SAG+]: Recruited %s contigs to %s' % (len(pass_list), sag_id))
 			with open(join(ara_path, sag_id + '.ara_recruits.tsv'), 'w') as ara_out:
@@ -387,7 +414,7 @@ def main():
 		
 
 	rpkm_df = pd.DataFrame(rpkm_pass_list, columns=['sag_id', 'contig_id'])
-
+	
 	#####################################################################################
 	#####################################################################################
 	#####################################################################################
@@ -401,7 +428,7 @@ def main():
 	#####################################################################################
 	# TODO: Think about using Minimum Description Length (MDL) instead of AIC/BIC
 	#		[Normalized Maximum Likelihood or Fish Information Approximation]
-	# TODO: Put SAG concat and UMAP into GMM loop
+	# TODO: Should SAG be included in training data?
 	# Build/Load tetramers for SAGs and MG subset by ara recruits
 	
 	if isfile(join(tra_path, mg_id + '.tetras.tsv')):
