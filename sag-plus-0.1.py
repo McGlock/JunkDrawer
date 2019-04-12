@@ -137,7 +137,7 @@ def main():
 
 	sag_path = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/source_genomes/'
 	mg_file = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/CAMI_high_GoldStandardAssembly.fasta'
-	mg_rpkm_file = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/CAMI_high_GoldStandardAssembly.rpkm.tsv'
+	mg_rpkm_file = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/TPMs/CAMI_high_GoldStandardAssembly.tpm.tsv'
 	max_contig_len = 10000
 	overlap_len = 2000
 	save_path = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/'
@@ -338,15 +338,16 @@ def main():
 
 	print('[SAG+]: Loading RPKM values for %s' % mg_id)
 	mg_rpkm_df = pd.read_csv(mg_rpkm_file, sep='\t', header=0)
-	mg_rpkm_col_list = ['Sequence_name']
+	mg_rpkm_col_list = ['Name']
 	for col in mg_rpkm_df.columns:
-		if 'RPKM' in col:
+		if 'TPM' in col:
 			mg_rpkm_col_list.append(col)
 	mg_rpkm_trim_df = mg_rpkm_df[mg_rpkm_col_list]
-	mg_rpkm_trim_df = mg_rpkm_trim_df.loc[mg_rpkm_trim_df['Sequence_name']
+	mg_rpkm_trim_df = mg_rpkm_trim_df.loc[mg_rpkm_trim_df['Name']
 											!= 'UNMAPPED'
 											]
-	mg_rpkm_trim_df.set_index('Sequence_name', inplace=True)
+	mg_rpkm_trim_df.set_index('Name', inplace=True)
+	'''
 	# Count # of subcontigs recruited to each SAG
 	mh_cnt_df = minhash_df.groupby(['sag_id', 'contig_id']).count().reset_index()
 	mh_cnt_df.columns = ['sag_id', 'contig_id', 'subcontig_recruits']
@@ -372,16 +373,17 @@ def main():
 	mg_max_only_df = mg_recruit_max_df.loc[mg_recruit_max_df['percent_recruited'] >=
 											mg_recruit_max_df['percent_max']
 											]
+	'''
 	# get MinHash "passed" mg rpkms
 	rpkm_pass_list = []
-	for sag_id in set(mg_max_only_df['sag_id']):
+	for sag_id in set(minhash_df['sag_id']):
 		print('[SAG+]: Calulating/Loading RPKM stats for %s' % sag_id)
 		if isfile(join(ara_path, sag_id + '.ara_recruits.tsv')):
 			with open(join(ara_path, sag_id + '.ara_recruits.tsv'), 'r') as ara_in:
 				pass_list = [x.rstrip('\n').split('\t') for x in ara_in.readlines()]
 		else:
-			sag_mh_pass_df = mg_max_only_df[mg_max_only_df['sag_id'] == sag_id]
-			mh_cntg_pass_list = set(sag_mh_pass_df['contig_id'])
+			sag_mh_pass_df = minhash_df[minhash_df['sag_id'] == sag_id]
+			mh_cntg_pass_list = set(sag_mh_pass_df['subcontig_id'])
 			mg_rpkm_pass_df = mg_rpkm_trim_df[mg_rpkm_trim_df.index.isin(mh_cntg_pass_list)]
 			mg_rpkm_pass_stat_df = mg_rpkm_pass_df.mean().reset_index()
 			mg_rpkm_pass_stat_df.columns = ['sample_id', 'mean']
@@ -406,14 +408,16 @@ def main():
 			pass_list = []
 			for md_nm in mg_rpkm_trim_df.index.values:
 				if ((md_nm in iqr_pass_df.index.values) or (md_nm in mh_cntg_pass_list)):
-					pass_list.append([sag_id, md_nm])
+					pass_list.append([sag_id, md_nm, md_nm.rsplit('_', 1)[0]])
 			print('[SAG+]: Recruited %s contigs to %s' % (len(pass_list), sag_id))
 			with open(join(ara_path, sag_id + '.ara_recruits.tsv'), 'w') as ara_out:
 				ara_out.write('\n'.join(['\t'.join(x) for x in pass_list]))
 		rpkm_pass_list.extend(pass_list)
 		
 
-	rpkm_df = pd.DataFrame(rpkm_pass_list, columns=['sag_id', 'contig_id'])
+	rpkm_df = pd.DataFrame(rpkm_pass_list, columns=['sag_id', 'subcontig_id',
+													'contig_id'
+													])
 	
 	#####################################################################################
 	#####################################################################################
@@ -468,10 +472,10 @@ def main():
 			print('[SAG+]: Calculating AIC/BIC for %s GMM' % sag_id)
 			# Concat SAGs amd MG for GMM
 			mg_rpkm_contig_list = list(rpkm_df.loc[rpkm_df['sag_id'] == sag_id
-													]['contig_id'].values
+													]['subcontig_id'].values
 													)
 			mg_rpkm_pass_index = [x for x in mg_tetra_df.index
-							if x.rsplit('_', 1)[0] in mg_rpkm_contig_list
+							if x in mg_rpkm_contig_list
 							]
 			mg_rpkm_filter_df = mg_tetra_df.loc[mg_tetra_df.index.isin(mg_rpkm_pass_index)]
 			concat_tetra_df = pd.concat([sag_tetra_df, mg_rpkm_filter_df])
