@@ -152,53 +152,72 @@ for i, row in filter_df.iterrows():
 		candidate_list.append(False)
 filter_df['candidate'] = candidate_list
 # join phylum and class
-filter_df['label'] = [x[0] + ' ' + x[1] for x in
+filter_df['Phy_Cla'] = [x[0] + ' ' + x[1] for x in
 						zip(filter_df['Phylum'], filter_df['Class'])
 						]
 # add * to all candidate phyla
-filter_df['label'] = ['*'+x[0]+'*' if x[1] == True else x[0]
-						for x in zip(filter_df['label'], filter_df['candidate'])
+filter_df['Phyl_Cla_label'] = ['*'+x[0]+'*' if x[1] == True else x[0]
+						for x in zip(filter_df['Phy_Cla'], filter_df['candidate'])
 						]
+filter_df['Phyl_label'] = ['*'+x[0]+'*' if x[1] == True else x[0]
+						for x in zip(filter_df['Phylum'], filter_df['candidate'])
+						]
+
 # remove the Euks
 filter_df = filter_df[filter_df['Domain'] != 'Eukaryota']
 
-
 # Order phylum by domain
-dom_phy_list = zip(filter_df['Domain'], filter_df['Phylum'])
+dom_phy_list = zip(filter_df['Domain'], filter_df['Phyl_label'])
 sort_dom_phy_list = sorted(set(dom_phy_list), key=itemgetter(1), reverse=True)
 sort_dom_phy_list.sort(key=itemgetter(0))
 phylum_set = [x[1] for x in sort_dom_phy_list if '*' not in x[1]]
 # add Candidates to end
-cand_phy_list = [x[1] for x in sort_dom_phy_list if '*' in x[1]]
-cand_phy_list.extend(phylum_set)
-phylum_set = cand_phy_list
+#cand_phy_list = [x[1] for x in sort_dom_phy_list if '*' in x[1]]
+#cand_phy_list.extend(phylum_set)
+#phylum_set = cand_phy_list
+
 # Order class by domain
-dom_cla_list = zip(filter_df['Domain'], filter_df['label'])
+dom_cla_list = zip(filter_df['Domain'], filter_df['Phyl_Cla_label'])
 sort_dom_cla_list = sorted(set(dom_cla_list), key=itemgetter(1), reverse=True)
 sort_dom_cla_list.sort(key=itemgetter(0))
 class_set = [x[1] for x in sort_dom_cla_list if '*' not in x[1]]
 # add Candidates to end
-cand_cla_list = [x[1] for x in sort_dom_cla_list if '*' in x[1]]
-cand_cla_list.extend(class_set)
-class_set = cand_cla_list
+#cand_cla_list = [x[1] for x in sort_dom_cla_list if '*' in x[1]]
+#cand_cla_list.extend(class_set)
+#class_set = cand_cla_list
 
 seqtype_list = list(set(filter_df['seqtype']))
 domain_list = list(set(filter_df['Domain']))
 for seqtype in seqtype_list:
+	print(seqtype)
 	seqtype_df = filter_df.loc[(filter_df['seqtype'] == seqtype)]
-	domain_df = seqtype_df.copy()
+	#domain_df = seqtype_df.copy()
 	#for domain in domain_list:
 		#domain_df = seqtype_df.loc[seqtype_df['Domain'] == domain]
 		#if domain_df.empty != True:
-	depth_sum_dict = domain_df.groupby(['depth'])['Size'].sum().to_dict()
-	domain_df['depth_sum'] = [depth_sum_dict[x] for x in domain_df['depth']]
-	domain_df['size_prop'] = (domain_df['Size']/domain_df['depth_sum'])*100
-	#domain_df = domain_df.loc[domain_df['Size'] > 1]
+	depth_sum_dict = seqtype_df.groupby(['depth'])['Size'].sum().to_dict()
+	seqtype_df['depth_sum'] = [depth_sum_dict[x] for x in seqtype_df['depth']]
+	seqtype_df['size_prop'] = (seqtype_df['Size']/seqtype_df['depth_sum'])*100
+	#seqtype_df = seqtype_df.loc[seqtype_df['Size'] > 1]
 
-	class_df = domain_df.groupby(['Phylum', 'label', 'depth', 'candidate'])['size_prop',
-									'Size'].sum().reset_index()
-	phylum_df = domain_df.groupby(['Phylum', 'depth', 'candidate'])['size_prop',
-									'Size'].sum().reset_index()				
+	# group candiate groups
+	cand_phy_df = seqtype_df.loc[seqtype_df['candidate'] == True]
+	grp_cand_df = cand_phy_df.groupby(['depth'])['size_prop', 'Size'].sum().reset_index()
+	grp_cand_df['Phylum'] = 'Candidate Groups'
+	grp_cand_df['Phyl_label'] = 'Candidate Groups'
+	grp_cand_df['candidate'] = True
+	phylum_set.insert(0, 'Candidate Groups')
+	class_set.insert(0, 'Candidate Groups')
+
+	# add grouped candidates to final df
+	add_cand_df = pd.concat([seqtype_df.loc[seqtype_df['candidate'] == False], grp_cand_df])
+
+	# build class and phylum level df	
+	class_df = add_cand_df.groupby(['Phylum', 'Phyl_Cla_label', 'depth', 'candidate']
+									)['size_prop', 'Size'].sum().reset_index()
+	phylum_df = add_cand_df.groupby(['Phylum', 'Phyl_label', 'depth', 'candidate']
+									)['size_prop', 'Size'].sum().reset_index()			
+
 	phylum_set.insert(0, '')
 	phylum_set.append('')
 	class_set.insert(0, '')
@@ -210,7 +229,7 @@ for seqtype in seqtype_list:
 	x_dict = dict((x[1], x[0]) for x in enumerate(depth_order_list))
 
 	phylum_df['x_index'] = [x_dict[x] for x in phylum_df['depth']]
-	phylum_df['y_index'] = [phy_y_dict[y] for y in phylum_df['Phylum']]
+	phylum_df['y_index'] = [phy_y_dict[y] for y in phylum_df['Phyl_label']]
 
 	legend_markers = [scatter([0], [0], marker='o',label='<0.1', color='k'),
 					scatter([0], [0], marker='o',label='1', color='k'),
@@ -257,7 +276,7 @@ for seqtype in seqtype_list:
 	x_dict = dict((x[1], x[0]) for x in enumerate(depth_order_list))
 
 	class_df['x_index'] = [x_dict[x] for x in class_df['depth']]
-	class_df['y_index'] = [cla_y_dict[y] for y in class_df['label']]
+	class_df['y_index'] = [cla_y_dict[y] for y in class_df['Phyl_Cla_label']]
 
 	legend_markers = [scatter([0], [0], marker='o',label='<0.1', color='k'),
 					scatter([0], [0], marker='o',label='1', color='k'),
