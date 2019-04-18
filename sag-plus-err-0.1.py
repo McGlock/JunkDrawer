@@ -13,7 +13,7 @@ from collections import Counter
 
 def calc_err(df):
 	# build error type df for each filter separately
-	group_df = df.groupby(['sag_id', 'algorithm', 'level']).sum().reset_index()
+	group_df = df.copy()
 	group_df['precision'] = group_df['TruePos'] / \
 								(group_df['TruePos'] + group_df['FalsePos'])
 	group_df['sensitivity'] = group_df['TruePos'] / \
@@ -71,6 +71,7 @@ mh_df_list = []
 mh_file_list = [x for x in os.listdir(mh_path) 
 					if 'mhr_recruits.tsv' in x
 					]
+print('loading minhash files')
 for mh_file in mh_file_list:
 	file_path = os.path.join(mh_path, mh_file)
 	file_df = pd.read_csv(file_path, sep='\t', header=None,
@@ -85,14 +86,14 @@ rpkm_df_list = []
 rpkm_file_list = [x for x in os.listdir(rpkm_path) 
 					if 'ara_recruits.tsv' in x
 					]
+print('loading rpkm files')
 for rpkm_file in rpkm_file_list:
 	file_path = os.path.join(rpkm_path, rpkm_file)
 	file_df = pd.read_csv(file_path, sep='\t', header=None,
-							names=['sag_id', 'contig_id']
+							names=['sag_id', 'subcontig_id', 'contig_id']
 							)
 	rpkm_df_list.append(file_df)
 rpkm_concat_df = pd.concat(rpkm_df_list)
-rpkm_concat_df.insert(1, 'subcontig_id', '')
 
 # Tetra GMM
 tetra_path = joinpath(files_path, 'tetra_recruits/')
@@ -100,6 +101,7 @@ tetra_df_list = []
 tetra_file_list = [x for x in os.listdir(tetra_path) 
 					if 'tra_recruits.tsv' in x
 					]
+print('loading tetra files')
 for tetra_file in tetra_file_list:
 	file_path = os.path.join(tetra_path, tetra_file)
 	file_df = pd.read_csv(file_path, sep='\t', header=None,
@@ -110,6 +112,7 @@ tetra_concat_df = pd.concat(tetra_df_list)
 
 # Final Recruits
 final_file = joinpath(files_path, 'final_recruits/final_recruits.tsv')
+print('loading combined files')
 final_df = pd.read_csv(final_file, sep='\t', header=0, index_col=0,
 							names=['sag_id', 'subcontig_id', 'contig_id']
 							)
@@ -119,55 +122,70 @@ rpkm_concat_df['algorithm'] = 'RPKM'
 tetra_concat_df['algorithm'] = 'tetra_GMM'
 final_df['algorithm'] = 'combined'
 final_concat_df = pd.concat([mh_concat_df, rpkm_concat_df, tetra_concat_df, final_df])
-final_tax_df = final_concat_df.merge(tax_mg_df, left_on='contig_id', right_on='@@SEQUENCEID',
+final_group_df = final_concat_df.groupby(['sag_id', 'algorithm', 'contig_id'])[
+											'subcontig_id'].count().reset_index()
+print('merging all')
+final_tax_df = final_group_df.merge(tax_mg_df, left_on='contig_id', right_on='@@SEQUENCEID',
 								how='left'
 								)
+sag_cnt_dict = final_tax_df.groupby('sag_id')['sag_id'].count().to_dict()
+#final_tax_df['contig_count'] = [sag_cnt_dict[x] for x in final_tax_df['sag_id']]
+#final_tax_df.sort_values('contig_count', ascending=True, inplace=True)
 
 error_list = []
-for i, sag_id in enumerate(list(set(final_tax_df['sag_id']))):
+algo_list = ['MinHash', 'RPKM', 'tetra_GMM', 'combined']
+level_list = ['genus', 'species', 'strain', 'CAMI_genomeID']
+for i, sag_id in enumerate(list(final_tax_df['sag_id'].unique())[0:10]):
 	sag_key_list = [str(s) for s in set(tax_mg_df['CAMI_genomeID']) if str(s) in sag_id]
 	sag_key = max(sag_key_list, key=len)
 	sag_sub_df = final_tax_df.loc[final_tax_df['sag_id'] == sag_id]
-	for algo in set(sag_sub_df['algorithm']):
+	for algo in algo_list:
 		algo_sub_df = sag_sub_df.loc[sag_sub_df['algorithm'] == algo]
-		for col in taxpath_df.columns:
+		for col in level_list:
 			col_key = final_tax_df.loc[final_tax_df['CAMI_genomeID'] == sag_key,
 										col].iloc[0]
-			contig2col_key = {x[0]: x[1] for x in zip(tax_mg_df['@@SEQUENCEID'],
-												tax_mg_df[col])
-												}
-			print(i, sag_id, algo, col)
+			cami_include_ids = list(set(tax_mg_df.loc[tax_mg_df[col] == col_key,
+									'CAMI_genomeID'])
+									)
+			mg_include_contigs = list(set(tax_mg_df.loc[tax_mg_df['CAMI_genomeID'
+									].isin(cami_include_ids)]['@@SEQUENCEID'])
+									)
+			sag_include_contigs = list(set(tax_mg_df.loc[tax_mg_df['CAMI_genomeID'
+									].isin([sag_key])]['@@SEQUENCEID'])
+									)
+
+			print(i, sag_id, algo, col, col_key)
 			if col == 'CAMI_genomeID':
 				col = 'perfect'
 				col_key = sag_key
-			for contig_id in contig2col_key.keys():
-				err_list = [sag_id, algo, col, contig_id, 0, 0, 0, 0]
+			err_list = [sag_id, algo, col, 0, 0, 0, 0]
+			for contig_id in tax_mg_df['@@SEQUENCEID']:
 				if ((contig_id in list(algo_sub_df['contig_id'])) and 
-					(contig2col_key[contig_id] == col_key)
+					(contig_id in mg_include_contigs)
 					):
-					err_list[4] = 1 # 'TruePos'
+					err_list[3] += 1 # 'TruePos'
 				elif ((contig_id in list(algo_sub_df['contig_id'])) and 
-					(contig2col_key[contig_id] != col_key)
+					(contig_id not in mg_include_contigs)
 					):
-					err_list[5] = 1 # 'FalsePos'
+					err_list[4] += 1 # 'FalsePos'
 				elif  ((contig_id not in list(algo_sub_df['contig_id'])) and
-					(contig2col_key[contig_id] == col_key)
+					(contig_id in sag_include_contigs)
 					):
-					err_list[6] = 1 # 'FalseNeg'
+					err_list[5] += 1 # 'FalseNeg'
 				elif ((contig_id not in list(algo_sub_df['contig_id'])) and 
-					(contig2col_key[contig_id] != col_key)
+					(contig_id not in sag_include_contigs)
 					):
-					err_list[7] = 1 # 'TrueNeg'
-				error_list.append(err_list)
+					err_list[6] += 1 # 'TrueNeg'
+			error_list.append(err_list)
 
 final_err_df = pd.DataFrame(error_list, columns=['sag_id', 'algorithm', 'level',
-													'contig_id', 'TruePos', 'FalsePos',
+													'TruePos', 'FalsePos',
 													'FalseNeg', 'TrueNeg'
 													])
 
-#final_err_df.to_csv('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + \
-#					'error_analysis/All_error.tsv', index=False, sep='\t'
-#					)
+final_err_df.to_csv('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + \
+					'error_analysis/All_error.tsv', index=False, sep='\t'
+					)
 
 calc_stats_df = calc_err(final_err_df)
 calc_stats_df.to_csv('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + \
@@ -187,6 +205,22 @@ for level in set(calc_stats_df['level']):
 				)
 	plt.clf()
 
+# build multi-level precision boxplot
+level_list = ['genus', 'species', 'strain', 'perfect']
+stat_list = ['precision', 'sensitivity', 'F1_score']
+comb_stat_df = calc_stats_df.loc[((calc_stats_df['algorithm'] == 'combined') & 
+									(calc_stats_df['level'].isin(level_list)) &
+									(calc_stats_df['statistic'].isin(stat_list))
+									)]
+sns.set_context("paper")
+ax = sns.catplot( x="level", y="score", hue='statistic', kind='box',
+					data=comb_stat_df, aspect=2
+					)
+plt.title('SAG-plus CAMI-1-High')
+plt.savefig('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + \
+			'error_analysis/multi-level_precision_boxplox.svg', bbox_inches='tight'
+			)
+plt.clf()
 
 '''
 
