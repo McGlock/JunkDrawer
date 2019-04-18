@@ -137,7 +137,7 @@ def main():
 
 	sag_path = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/source_genomes/'
 	mg_file = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/CAMI_high_GoldStandardAssembly.fasta'
-	mg_rpkm_file = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/TPMs/CAMI_high_GoldStandardAssembly.tpm.tsv'
+	mg_rpkm_file = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/RPKMs/CAMI_high_GoldStandardAssembly.rpkm.tsv'
 	max_contig_len = 10000
 	overlap_len = 2000
 	save_path = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/'
@@ -338,15 +338,15 @@ def main():
 
 	print('[SAG+]: Loading RPKM values for %s' % mg_id)
 	mg_rpkm_df = pd.read_csv(mg_rpkm_file, sep='\t', header=0)
-	mg_rpkm_col_list = ['Name']
+	mg_rpkm_col_list = ['Sequence_name']
 	for col in mg_rpkm_df.columns:
-		if 'TPM' in col:
+		if 'RPKM' in col:
 			mg_rpkm_col_list.append(col)
 	mg_rpkm_trim_df = mg_rpkm_df[mg_rpkm_col_list]
-	mg_rpkm_trim_df = mg_rpkm_trim_df.loc[mg_rpkm_trim_df['Name']
+	mg_rpkm_trim_df = mg_rpkm_trim_df.loc[mg_rpkm_trim_df['Sequence_name']
 											!= 'UNMAPPED'
 											]
-	mg_rpkm_trim_df.set_index('Name', inplace=True)
+	mg_rpkm_trim_df.set_index('Sequence_name', inplace=True)
 	'''
 	# Count # of subcontigs recruited to each SAG
 	mh_cnt_df = minhash_df.groupby(['sag_id', 'contig_id']).count().reset_index()
@@ -384,6 +384,7 @@ def main():
 		else:
 			sag_mh_pass_df = minhash_df[minhash_df['sag_id'] == sag_id]
 			mh_cntg_pass_list = set(sag_mh_pass_df['subcontig_id'])
+			'''
 			mg_rpkm_mh_df = mg_rpkm_trim_df[mg_rpkm_trim_df.index.isin(mh_cntg_pass_list)]
 			mg_rpkm_mh_df['contig_id'] = [x.rsplit('_', 1)[0] for x in
 											mg_rpkm_mh_df.index
@@ -397,6 +398,7 @@ def main():
 				low_pass_list = list(sub_rpkm_df.quantile(0.25))
 				high_pass_list = list(sub_rpkm_df.quantile(0.75))
 				filter_outliers_df = sub_rpkm_df.copy()
+				print(filter_outliers_df.head())
 				for i, col_nm in enumerate(sub_rpkm_df.columns):
 					low_pass = low_pass_list[i]
 					high_pass = high_pass_list[i]
@@ -404,9 +406,19 @@ def main():
 											((filter_outliers_df[col_nm] >= low_pass) &
 											(filter_outliers_df[col_nm] <= high_pass)
 											)]
+				print(filter_outliers_df)
+				print(low_pass_list)
+				print(high_pass_list)
+				sys.exit()
+
 				subcontig_keep_list.extend(list(filter_outliers_df.index))
+			removed_subs = len(mh_cntg_pass_list) - len(subcontig_keep_list)
+			print('[SAG+]: Removed %s outliers from %s MinHash recruits'
+					% (removed_subs, len(mh_cntg_pass_list))
+					)
+			'''		
 			mg_rpkm_pass_df = mg_rpkm_trim_df[
-										mg_rpkm_trim_df.index.isin(subcontig_keep_list)
+										mg_rpkm_trim_df.index.isin(mh_cntg_pass_list)
 										]
 			mg_rpkm_pass_stat_df = mg_rpkm_pass_df.mean().reset_index()
 			mg_rpkm_pass_stat_df.columns = ['sample_id', 'mean']
@@ -423,21 +435,22 @@ def main():
 			iqr_pass_df = mg_rpkm_trim_df.copy()
 			for i, col_nm in enumerate(mg_rpkm_trim_df.columns):
 				pass_stats = mg_rpkm_pass_stat_df.iloc[[i]]
-				pass_min = pass_stats['IQ_25'].values[0]
-				pass_max = pass_stats['IQ_75'].values[0]
+				pass_min = pass_stats['IQ_10'].values[0]
+				pass_max = pass_stats['IQ_90'].values[0]
 				iqr_pass_df = iqr_pass_df.loc[(iqr_pass_df[col_nm] >= pass_min) &
 												(iqr_pass_df[col_nm] <= pass_max)
 												]
 			pass_list = []
-			for md_nm in mg_rpkm_trim_df.index.values:
-				if ((md_nm in iqr_pass_df.index.values) or (md_nm in mh_cntg_pass_list)):
-					pass_list.append([sag_id, md_nm, md_nm.rsplit('_', 1)[0]])
-			print('[SAG+]: Recruited %s contigs to %s' % (len(pass_list), sag_id))
+			join_rpkm_recruits = set(list(iqr_pass_df.index) + list(mh_cntg_pass_list))
+			for md_nm in join_rpkm_recruits:
+				#if ((md_nm in iqr_pass_df.index.values) or (md_nm in mh_cntg_pass_list)):
+				pass_list.append([sag_id, md_nm, md_nm.rsplit('_', 1)[0]])
+			print('[SAG+]: Recruited %s subcontigs to %s' % (len(pass_list), sag_id))
+			
 			with open(join(ara_path, sag_id + '.ara_recruits.tsv'), 'w') as ara_out:
 				ara_out.write('\n'.join(['\t'.join(x) for x in pass_list]))
 		rpkm_pass_list.extend(pass_list)
 		
-
 	rpkm_df = pd.DataFrame(rpkm_pass_list, columns=['sag_id', 'subcontig_id',
 													'contig_id'
 													])
