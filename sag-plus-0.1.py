@@ -384,7 +384,30 @@ def main():
 		else:
 			sag_mh_pass_df = minhash_df[minhash_df['sag_id'] == sag_id]
 			mh_cntg_pass_list = set(sag_mh_pass_df['subcontig_id'])
-			mg_rpkm_pass_df = mg_rpkm_trim_df[mg_rpkm_trim_df.index.isin(mh_cntg_pass_list)]
+			mg_rpkm_mh_df = mg_rpkm_trim_df[mg_rpkm_trim_df.index.isin(mh_cntg_pass_list)]
+			mg_rpkm_mh_df['contig_id'] = [x.rsplit('_', 1)[0] for x in
+											mg_rpkm_mh_df.index
+											]
+			# Outlier detection and removal
+			subcontig_keep_list = []
+			for cont_id in set(mg_rpkm_mh_df['contig_id']):
+				sub_rpkm_df = mg_rpkm_mh_df.loc[mg_rpkm_mh_df['contig_id'] == cont_id
+													].drop(['contig_id'], axis=1
+													)				
+				low_pass_list = list(sub_rpkm_df.quantile(0.25))
+				high_pass_list = list(sub_rpkm_df.quantile(0.75))
+				filter_outliers_df = sub_rpkm_df.copy()
+				for i, col_nm in enumerate(sub_rpkm_df.columns):
+					low_pass = low_pass_list[i]
+					high_pass = high_pass_list[i]
+					filter_outliers_df = filter_outliers_df.loc[
+											((filter_outliers_df[col_nm] >= low_pass) &
+											(filter_outliers_df[col_nm] <= high_pass)
+											)]
+				subcontig_keep_list.extend(list(filter_outliers_df.index))
+			mg_rpkm_pass_df = mg_rpkm_trim_df[
+										mg_rpkm_trim_df.index.isin(subcontig_keep_list)
+										]
 			mg_rpkm_pass_stat_df = mg_rpkm_pass_df.mean().reset_index()
 			mg_rpkm_pass_stat_df.columns = ['sample_id', 'mean']
 			mg_rpkm_pass_stat_df['std'] = list(mg_rpkm_pass_df.std())
@@ -395,7 +418,7 @@ def main():
 			mg_rpkm_pass_stat_df['IQ_90'] = list(mg_rpkm_pass_df.quantile(0.90))
 			mg_rpkm_pass_stat_df['IQ_05'] = list(mg_rpkm_pass_df.quantile(0.05))
 			mg_rpkm_pass_stat_df['IQ_95'] = list(mg_rpkm_pass_df.quantile(0.95))
-			
+		
 			# Use passed MG from MHR to recruit more seqs
 			iqr_pass_df = mg_rpkm_trim_df.copy()
 			for i, col_nm in enumerate(mg_rpkm_trim_df.columns):
