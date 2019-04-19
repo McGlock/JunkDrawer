@@ -56,7 +56,7 @@ mg_contig_map_df = pd.read_csv(mg_contig_map, sep='\t', header=0)
 mg_contig_map_df['TAXID'] = [str(x) for x in mg_contig_map_df['TAXID']]
 
 # Merge contig map and taxpath DFs
-tax_mg_df = taxpath_df.merge(mg_contig_map_df, left_on='strain', right_on='TAXID',
+tax_mg_df = taxpath_df.merge(mg_contig_map_df, left_on='CAMI_genomeID', right_on='BINID',
 								how='right'
 								)
 tax_mg_df = tax_mg_df[['@@SEQUENCEID', 'CAMI_genomeID', 'domain', 'phylum', 'class', 'order',
@@ -133,9 +133,9 @@ sag_cnt_dict = final_tax_df.groupby('sag_id')['sag_id'].count().to_dict()
 #final_tax_df.sort_values('contig_count', ascending=True, inplace=True)
 
 error_list = []
-algo_list = ['MinHash', 'RPKM', 'tetra_GMM', 'combined']
-level_list = ['genus', 'species', 'strain', 'CAMI_genomeID']
-for i, sag_id in enumerate(list(final_tax_df['sag_id'].unique())[0:10]):
+algo_list = ['combined'] # ['MinHash', 'RPKM', 'tetra_GMM', 'combined']
+level_list = ['species', 'strain', 'CAMI_genomeID'] # ['genus', 'species', 'strain', 'CAMI_genomeID']
+for i, sag_id in enumerate(list(final_tax_df['sag_id'].unique())):
 	sag_key_list = [str(s) for s in set(tax_mg_df['CAMI_genomeID']) if str(s) in sag_id]
 	sag_key = max(sag_key_list, key=len)
 	sag_sub_df = final_tax_df.loc[final_tax_df['sag_id'] == sag_id]
@@ -154,28 +154,24 @@ for i, sag_id in enumerate(list(final_tax_df['sag_id'].unique())[0:10]):
 									].isin([sag_key])]['@@SEQUENCEID'])
 									)
 
-			print(i, sag_id, algo, col, col_key)
+			print(i, sag_id, algo, col, col_key, len(mg_include_contigs),
+				len(sag_include_contigs), len(cami_include_ids)
+				)
 			if col == 'CAMI_genomeID':
 				col = 'perfect'
 				col_key = sag_key
 			err_list = [sag_id, algo, col, 0, 0, 0, 0]
 			for contig_id in tax_mg_df['@@SEQUENCEID']:
-				if ((contig_id in list(algo_sub_df['contig_id'])) and 
-					(contig_id in mg_include_contigs)
-					):
-					err_list[3] += 1 # 'TruePos'
-				elif ((contig_id in list(algo_sub_df['contig_id'])) and 
-					(contig_id not in mg_include_contigs)
-					):
-					err_list[4] += 1 # 'FalsePos'
-				elif  ((contig_id not in list(algo_sub_df['contig_id'])) and
-					(contig_id in sag_include_contigs)
-					):
-					err_list[5] += 1 # 'FalseNeg'
-				elif ((contig_id not in list(algo_sub_df['contig_id'])) and 
-					(contig_id not in sag_include_contigs)
-					):
-					err_list[6] += 1 # 'TrueNeg'
+				if contig_id in list(algo_sub_df['contig_id']):
+					if contig_id in mg_include_contigs:
+						err_list[3] += 1 # 'TruePos'
+					else:
+						err_list[4] += 1 # 'FalsePos'
+				else:
+					if contig_id in sag_include_contigs:
+						err_list[5] += 1 # 'FalseNeg'
+					else:
+						err_list[6] += 1 # 'TrueNeg'
 			error_list.append(err_list)
 
 final_err_df = pd.DataFrame(error_list, columns=['sag_id', 'algorithm', 'level',
