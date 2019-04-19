@@ -347,33 +347,7 @@ def main():
 											!= 'UNMAPPED'
 											]
 	mg_rpkm_trim_df.set_index('Sequence_name', inplace=True)
-	'''
-	# Count # of subcontigs recruited to each SAG
-	mh_cnt_df = minhash_df.groupby(['sag_id', 'contig_id']).count().reset_index()
-	mh_cnt_df.columns = ['sag_id', 'contig_id', 'subcontig_recruits']
-	# Build subcontig count for each MG contig
-	mg_contig_list = [x.rsplit('_', 1)[0] for x in mg_headers]
-	mg_tot_df = pd.DataFrame(zip(mg_contig_list, mg_headers),
-									columns=['contig_id', 'subcontig_id'])
-	mg_tot_cnt_df = mg_tot_df.groupby(['contig_id']).count().reset_index()
-	mg_tot_cnt_df.columns = ['contig_id', 'subcontig_total']
-	mg_recruit_df = mh_cnt_df.merge(mg_tot_cnt_df, how='left', on='contig_id')
-	mg_recruit_df['percent_recruited'] = mg_recruit_df['subcontig_recruits'] / \
-											mg_recruit_df['subcontig_total']
-	mg_recruit_df.sort_values(by='percent_recruited', ascending=False, inplace=True)
-	# Only pass contigs that have the magjority of subcontigs recruited (>= 51%)
-	mg_recruit_filter_df = mg_recruit_df.loc[mg_recruit_df['percent_recruited'] >= 0.51]
-	
-	mg_contig_per_max_df = mg_recruit_filter_df.groupby(['contig_id'])[
-											'percent_recruited'].max().reset_index()
-	mg_contig_per_max_df.columns = ['contig_id', 'percent_max']
-	mg_recruit_max_df = mg_recruit_filter_df.merge(mg_contig_per_max_df, how='left',
-													on='contig_id')
-	# Now pass contigs that have the maximum recruit % of subcontigs
-	mg_max_only_df = mg_recruit_max_df.loc[mg_recruit_max_df['percent_recruited'] >=
-											mg_recruit_max_df['percent_max']
-											]
-	'''
+
 	# get MinHash "passed" mg rpkms
 	rpkm_pass_list = []
 	for sag_id in set(minhash_df['sag_id']):
@@ -383,40 +357,7 @@ def main():
 				pass_list = [x.rstrip('\n').split('\t') for x in ara_in.readlines()]
 		else:
 			sag_mh_pass_df = minhash_df[minhash_df['sag_id'] == sag_id]
-			mh_cntg_pass_list = set(sag_mh_pass_df['subcontig_id'])
-			'''
-			mg_rpkm_mh_df = mg_rpkm_trim_df[mg_rpkm_trim_df.index.isin(mh_cntg_pass_list)]
-			mg_rpkm_mh_df['contig_id'] = [x.rsplit('_', 1)[0] for x in
-											mg_rpkm_mh_df.index
-											]
-			# Outlier detection and removal
-			subcontig_keep_list = []
-			for cont_id in set(mg_rpkm_mh_df['contig_id']):
-				sub_rpkm_df = mg_rpkm_mh_df.loc[mg_rpkm_mh_df['contig_id'] == cont_id
-													].drop(['contig_id'], axis=1
-													)				
-				low_pass_list = list(sub_rpkm_df.quantile(0.25))
-				high_pass_list = list(sub_rpkm_df.quantile(0.75))
-				filter_outliers_df = sub_rpkm_df.copy()
-				print(filter_outliers_df.head())
-				for i, col_nm in enumerate(sub_rpkm_df.columns):
-					low_pass = low_pass_list[i]
-					high_pass = high_pass_list[i]
-					filter_outliers_df = filter_outliers_df.loc[
-											((filter_outliers_df[col_nm] >= low_pass) &
-											(filter_outliers_df[col_nm] <= high_pass)
-											)]
-				print(filter_outliers_df)
-				print(low_pass_list)
-				print(high_pass_list)
-				sys.exit()
-
-				subcontig_keep_list.extend(list(filter_outliers_df.index))
-			removed_subs = len(mh_cntg_pass_list) - len(subcontig_keep_list)
-			print('[SAG+]: Removed %s outliers from %s MinHash recruits'
-					% (removed_subs, len(mh_cntg_pass_list))
-					)
-			'''		
+			mh_cntg_pass_list = set(sag_mh_pass_df['subcontig_id'])	
 			mg_rpkm_pass_df = mg_rpkm_trim_df[
 										mg_rpkm_trim_df.index.isin(mh_cntg_pass_list)
 										]
@@ -435,8 +376,8 @@ def main():
 			iqr_pass_df = mg_rpkm_trim_df.copy()
 			for i, col_nm in enumerate(mg_rpkm_trim_df.columns):
 				pass_stats = mg_rpkm_pass_stat_df.iloc[[i]]
-				pass_min = pass_stats['IQ_10'].values[0]
-				pass_max = pass_stats['IQ_90'].values[0]
+				pass_min = pass_stats['IQ_25'].values[0]
+				pass_max = pass_stats['IQ_75'].values[0]
 				iqr_pass_df = iqr_pass_df.loc[(iqr_pass_df[col_nm] >= pass_min) &
 												(iqr_pass_df[col_nm] <= pass_max)
 												]
@@ -505,7 +446,6 @@ def main():
 				sag_tetra_df.set_index('contig_id', inplace=True)
 				sag_tetra_df.to_csv(join(tra_path, sag_id + '.tetras.tsv'), sep='\t')
 
-			print('[SAG+]: Calculating AIC/BIC for %s GMM' % sag_id)
 			# Concat SAGs amd MG for GMM
 			mg_rpkm_contig_list = list(rpkm_df.loc[rpkm_df['sag_id'] == sag_id
 													]['subcontig_id'].values
