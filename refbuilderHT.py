@@ -106,7 +106,7 @@ for file in file_list:
 
 	align_cmd = ['muscle', '-in', file, '-out', ref_aln_file]
 	hmmbuild_cmd = ['hmmbuild --cpu 4', ref_hmm_file, ref_aln_file]
-	hmmsearch_cmd = ['hmmsearch --cpu 4 -A', recruit_aln_file, ref_hmm_file, ref_db_path]
+	hmmsearch_cmd = ['hmmsearch --cpu 4 -E 1e-7 -A', recruit_aln_file, ref_hmm_file, ref_db_path]
 	sto2fasta_cmd = ['seqmagick convert --ungap', recruit_aln_file,
 						recruit_fasta_file
 						]
