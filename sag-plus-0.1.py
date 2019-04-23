@@ -357,9 +357,11 @@ def main():
 				pass_list = [x.rstrip('\n').split('\t') for x in ara_in.readlines()]
 		else:
 			sag_mh_pass_df = minhash_df[minhash_df['sag_id'] == sag_id]
-			mh_cntg_pass_list = set(sag_mh_pass_df['subcontig_id'])	
+			mh_cntg_pass_list = set(sag_mh_pass_df['contig_id'])
+			cntg2sub_pass_list = [x for x in mg_rpkm_trim_df.index if x.rsplit('_', 1)[0]
+									in mh_cntg_pass_list]
 			mg_rpkm_pass_df = mg_rpkm_trim_df[
-										mg_rpkm_trim_df.index.isin(mh_cntg_pass_list)
+										mg_rpkm_trim_df.index.isin(cntg2sub_pass_list)
 										]
 			mg_rpkm_pass_stat_df = mg_rpkm_pass_df.mean().reset_index()
 			mg_rpkm_pass_stat_df.columns = ['sample_id', 'mean']
@@ -371,13 +373,15 @@ def main():
 			mg_rpkm_pass_stat_df['IQ_90'] = list(mg_rpkm_pass_df.quantile(0.90))
 			mg_rpkm_pass_stat_df['IQ_05'] = list(mg_rpkm_pass_df.quantile(0.05))
 			mg_rpkm_pass_stat_df['IQ_95'] = list(mg_rpkm_pass_df.quantile(0.95))
+			mg_rpkm_pass_stat_df['IQ_01'] = list(mg_rpkm_pass_df.quantile(0.01))
+			mg_rpkm_pass_stat_df['IQ_99'] = list(mg_rpkm_pass_df.quantile(0.99))
 		
 			# Use passed MG from MHR to recruit more seqs
 			iqr_pass_df = mg_rpkm_trim_df.copy()
 			for i, col_nm in enumerate(mg_rpkm_trim_df.columns):
 				pass_stats = mg_rpkm_pass_stat_df.iloc[[i]]
-				pass_min = pass_stats['IQ_25'].values[0]
-				pass_max = pass_stats['IQ_75'].values[0]
+				pass_min = pass_stats['IQ_05'].values[0]
+				pass_max = pass_stats['IQ_95'].values[0]
 				iqr_pass_df = iqr_pass_df.loc[(iqr_pass_df[col_nm] >= pass_min) &
 												(iqr_pass_df[col_nm] <= pass_max)
 												]
@@ -608,6 +612,7 @@ def main():
 				data.extend(recruits_in.readlines())
 			join_data = '\n'.join(data).replace('\n\n', '\n')
 			cat_file.write(join_data)
+	'''
 		# Use minimus2 to merge the SAG and the recruits into one assembly
 		toAmos_cmd = ['/home/rmclaughlin/bin/amos-3.1.0/bin/toAmos', '-s',
 						join(ext_path, sag_id + '.extend_SAG.fasta'), '-o',
@@ -643,7 +648,8 @@ def main():
 					]
 	run_checkm = Popen(checkm_cmd, stdout=PIPE)
 	print(run_checkm.communicate()[0].decode())
-		
+	'''
+	
 if __name__ == "__main__":
 	main()
 

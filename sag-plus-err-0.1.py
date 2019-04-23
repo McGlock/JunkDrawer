@@ -133,8 +133,8 @@ sag_cnt_dict = final_tax_df.groupby('sag_id')['sag_id'].count().to_dict()
 #final_tax_df.sort_values('contig_count', ascending=True, inplace=True)
 
 error_list = []
-algo_list = ['combined'] # ['MinHash', 'RPKM', 'tetra_GMM', 'combined']
-level_list = ['species', 'strain', 'CAMI_genomeID'] # ['genus', 'species', 'strain', 'CAMI_genomeID']
+algo_list = ['MinHash', 'RPKM', 'tetra_GMM', 'combined']
+level_list = ['genus', 'species', 'strain', 'CAMI_genomeID']
 for i, sag_id in enumerate(list(final_tax_df['sag_id'].unique())):
 	sag_key_list = [str(s) for s in set(tax_mg_df['CAMI_genomeID']) if str(s) in sag_id]
 	sag_key = max(sag_key_list, key=len)
@@ -217,80 +217,3 @@ plt.savefig('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + \
 			'error_analysis/multi-level_precision_boxplox.svg', bbox_inches='tight'
 			)
 plt.clf()
-
-'''
-
-
-
-# Recruited fastas
-fasta_path = joinpath(files_path, 'final_recruits/')
-fasta_file_list = []
-fasta_file_list = [x for x in os.listdir(fasta_path) 
-					if 'final_recruits.fasta' in x
-					]
-sag_taxid_list = []
-for fa_file in fasta_file_list:
-	sag_id = fa_file.split('.final_recruits.fasta')[0]
-	print(sag_id)
-	file_path = os.path.join(fasta_path, fa_file)
-	with open(file_path, 'r') as fast_in:
-		data = fast_in.readlines()
-		for line in data:
-			if '>' in line:
-				sag_key_list = [s for s in sag_taxmap_df['_CAMI_genomeID'] if s in sag_id]
-				sag_key = max(sag_key_list, key=len)
-				taxid = str(sag_taxmap_df.loc[sag_taxmap_df['_CAMI_genomeID'] == sag_key,
-											'@@TAXID'].values[0]).split('.')[0]
-				mg_contid_id = line.rsplit('_',1)[0].lstrip('>')
-				sag_taxid_list.append([mg_contid_id, sag_id, taxid])
-sag_taxid_df = pd.DataFrame(sag_taxid_list, columns=['mg_contig_id', 'sag_id', 'strain'])
-sag_lineage_df = sag_taxid_df.merge(taxpath_df, on='strain', how='left')
-sag_lineage_df.drop_duplicates(inplace=True)
-
-# Calculate all level of precision
-sag_precision_list = []
-for sag_id in list(set(sag_lineage_df['sag_id'])):
-	sag_key_list = [s for s in sag_taxmap_df['_CAMI_genomeID'] if s in sag_id]
-	sag_key = max(sag_key_list, key=len)
-	sag_sub_df = sag_lineage_df.loc[sag_lineage_df['sag_id'] == sag_id]
-	for col in taxpath_df.columns:
-		col_key = taxpath_df.loc[taxpath_df['CAMI_genomeID'] == sag_key, col].iloc[0]
-		cami_include_ids = list(taxpath_df.loc[taxpath_df['CAMI_genomeID'] == sag_key,
-								'CAMI_genomeID']
-								)
-		mg_tot_contigs = mg_contig_map_df.loc[mg_contig_map_df['BINID'
-									].isin(cami_include_ids)]['@@SEQUENCEID'].count()
-		match_dict = sag_sub_df[col].value_counts().to_dict()
-		if col == 'CAMI_genomeID':
-			col = 'perfect'
-		sag_count = int(match_dict[col_key])
-		all_count = sum(match_dict.values())
-		precision = sag_count/all_count
-		sensitivity = sag_count/mg_tot_contigs
-		if sensitivity > 1.0:
-			sensitivity = 1.0
-		F1_score = 2 * ((precision * sensitivity) / (precision + sensitivity))
-		#sag_precision_list.append([sag_id, col, precision])
-		sag_precision_list.append([sag_id, col, 'precision', precision])
-		sag_precision_list.append([sag_id, col, 'sensitivity', sensitivity])
-		sag_precision_list.append([sag_id, col, 'F1_score', F1_score])
-
-sag_precision_df = pd.DataFrame(sag_precision_list,
-								columns=['sag_id', 'level', 'statistic', 'score']
-								)
-sag_precision_df.to_csv('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + \
-						'error_analysis/stats_level.tsv', index=False, sep='\t'
-						)
-print(len(set(sag_precision_df['sag_id'])))
-
-# build multi-level precision boxplot
-sns.set_context("paper")
-ax = sns.catplot( x="level", y="score", hue='statistic', kind='box',
-					data=sag_precision_df, aspect=2
-					)
-plt.title('SAG-plus CAMI-1-High')
-plt.savefig('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + \
-			'error_analysis/multi-level_precision_boxplox.svg', bbox_inches='tight'
-			)
-plt.clf()
-'''
