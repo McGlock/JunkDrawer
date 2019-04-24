@@ -347,6 +347,11 @@ def main():
 											!= 'UNMAPPED'
 											]
 	mg_rpkm_trim_df.set_index('Sequence_name', inplace=True)
+	# Normalize data
+	normed_rpkm_df = pd.DataFrame(normalize(mg_rpkm_trim_df.values),
+								columns=mg_rpkm_trim_df.columns,
+								index=mg_rpkm_trim_df.index
+								)
 
 	# get MinHash "passed" mg rpkms
 	rpkm_pass_list = []
@@ -357,12 +362,64 @@ def main():
 				pass_list = [x.rstrip('\n').split('\t') for x in ara_in.readlines()]
 		else:
 			sag_mh_pass_df = minhash_df[minhash_df['sag_id'] == sag_id]
-			mh_cntg_pass_list = set(sag_mh_pass_df['contig_id'])
-			cntg2sub_pass_list = [x for x in mg_rpkm_trim_df.index if x.rsplit('_', 1)[0]
-									in mh_cntg_pass_list]
-			mg_rpkm_pass_df = mg_rpkm_trim_df[
-										mg_rpkm_trim_df.index.isin(cntg2sub_pass_list)
+			mh_cntg_pass_list = set(sag_mh_pass_df['subcontig_id'])
+			mg_rpkm_pass_df = normed_rpkm_df[
+										normed_rpkm_df.index.isin(mh_cntg_pass_list)
 										]
+			mg_rpkm_test_df = normed_rpkm_df[
+										~normed_rpkm_df.index.isin(mh_cntg_pass_list)
+										]
+			n_components = np.arange(1, 100, 1)
+			models = [GMM(n, random_state=42)
+				  for n in n_components]
+			bics = []
+			aics = []
+			for i, model in enumerate(models):
+				n_comp = n_components[i]
+				try:
+					bic = model.fit(mg_rpkm_pass_df.values,
+									mg_rpkm_pass_df.index).bic(mg_rpkm_pass_df.values
+									)
+					bics.append(bic)
+				except:
+					print('[WARNING]: BIC failed with %s components' % n_comp)
+				try:
+					aic = model.fit(mg_rpkm_pass_df.values,
+									mg_rpkm_pass_df.index).aic(mg_rpkm_pass_df.values
+									)
+					aics.append(aic)
+				except:
+					print('[WARNING]: AIC failed with %s components' % n_comp)
+
+			min_bic_comp = n_components[bics.index(min(bics))]
+			min_aic_comp = n_components[aics.index(min(aics))]
+			print('[SAG+]: Min AIC/BIC at %s/%s, respectively' % 
+					(min_aic_comp, min_bic_comp)
+					)
+			print('[SAG+]: Using AIC as guide for GMM components')
+			print('[SAG+]: Training GMM on SAG tetras')
+			gmm = GMM(n_components=min_aic_comp, random_state=42
+							).fit(mg_rpkm_pass_df.values, mg_rpkm_pass_df.index
+							)
+			print('[SAG+]: GMM Converged: ', gmm.converged_)
+			sag_scores = gmm.score_samples(mg_rpkm_pass_df.values)
+			sag_scores_df = pd.DataFrame(data=sag_scores, index=mg_rpkm_pass_df.index)
+			sag_score_min = min(sag_scores_df.values)[0]
+			sag_score_max = max(sag_scores_df.values)[0]
+			mg_scores = gmm.score_samples(mg_rpkm_test_df.values)
+			mg_scores_df = pd.DataFrame(data=mg_scores, index=mg_rpkm_test_df.index)
+			gmm_pass_df = mg_scores_df.loc[(mg_scores_df[0] >= sag_score_min) &
+											(mg_scores_df[0] <= sag_score_max)
+											]
+
+			pass_list = []
+			for md_nm in gmm_pass_df.index.values:
+				pass_list.append([sag_id, md_nm, md_nm.rsplit('_', 1)[0]])
+			print('[SAG+]: Recruited %s subcontigs to %s' % (len(pass_list), sag_id))
+			with open(join(ara_path, sag_id + '.ara_recruits.tsv'), 'w') as ara_out:
+				ara_out.write('\n'.join(['\t'.join(x) for x in pass_list]))
+		rpkm_pass_list.extend(pass_list)
+		'''
 			mg_rpkm_pass_stat_df = mg_rpkm_pass_df.mean().reset_index()
 			mg_rpkm_pass_stat_df.columns = ['sample_id', 'mean']
 			mg_rpkm_pass_stat_df['std'] = list(mg_rpkm_pass_df.std())
@@ -395,7 +452,8 @@ def main():
 			with open(join(ara_path, sag_id + '.ara_recruits.tsv'), 'w') as ara_out:
 				ara_out.write('\n'.join(['\t'.join(x) for x in pass_list]))
 		rpkm_pass_list.extend(pass_list)
-		
+		'''
+
 	rpkm_df = pd.DataFrame(rpkm_pass_list, columns=['sag_id', 'subcontig_id',
 													'contig_id'
 													])
