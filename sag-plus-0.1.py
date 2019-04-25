@@ -11,6 +11,7 @@ from sklearn.preprocessing import normalize
 import numpy as np
 from collections import Counter
 from subprocess import Popen, PIPE
+from sklearn.mixture import BayesianGaussianMixture as BayGMM
 
 
 
@@ -369,6 +370,7 @@ def main():
 			mg_rpkm_test_df = normed_rpkm_df[
 										~normed_rpkm_df.index.isin(mh_cntg_pass_list)
 										]
+
 			n_components = np.arange(1, 100, 1)
 			models = [GMM(n, random_state=42)
 				  for n in n_components]
@@ -396,22 +398,68 @@ def main():
 			print('[SAG+]: Min AIC/BIC at %s/%s, respectively' % 
 					(min_aic_comp, min_bic_comp)
 					)
+
 			print('[SAG+]: Using AIC as guide for GMM components')
-			print('[SAG+]: Training GMM on SAG tetras')
+			print('[SAG+]: Training GMM on RPKMs of MinHash recruits')
+			
+			bayes_gmm = BayGMM(n_components=min_aic_comp, 
+								max_iter=len(mg_rpkm_pass_df.index), random_state=42
+								).fit(mg_rpkm_pass_df.values, mg_rpkm_pass_df.index
+							)
+			sag_predict = bayes_gmm.predict(mg_rpkm_pass_df.values)
+			sag_predict_df = pd.DataFrame([x for x in 
+											zip(mg_rpkm_pass_df.index, sag_predict)
+											], columns=['index', 'label'])
+			sag_pred_cnt_df = sag_predict_df.groupby('label').count().reset_index()
+			sag_pred_cnt_df.columns = ['label', 'count']
+			sag_pred_cnt_df['percent'] = [x/sum(sag_pred_cnt_df['count'])
+											for x in sag_pred_cnt_df['count']
+											]
+			sag_95_labels_df = sag_pred_cnt_df.loc[sag_pred_cnt_df['count'] > 1]
+			sag_95_index_list = [x[0] for x in zip(sag_predict_df['index'],
+												sag_predict_df['label']
+												) if x[1] in sag_95_labels_df['label']
+												]
+			sag_scores = bayes_gmm.score_samples(mg_rpkm_pass_df.values)
+			sag_scores_df = pd.DataFrame(data=sag_scores, index=mg_rpkm_pass_df.index)
+			sag_scores_95_df = sag_scores_df.loc[sag_scores_df.index.isin(sag_95_index_list)]
+			sag_score_95_min = round(min(sag_scores_95_df.values)[0], 1)
+			sag_score_95_max = round(max(sag_scores_95_df.values)[0], 1)
+			mg_scores = bayes_gmm.score_samples(mg_rpkm_test_df.values)
+			mg_predict = bayes_gmm.predict(mg_rpkm_test_df.values)
+			mg_bayes_list = [x for x in zip(mg_scores, mg_predict)]
+			mg_bayes_df = pd.DataFrame(data=mg_bayes_list, index=mg_rpkm_test_df.index)
+			mg_bayes_df.columns = ['score', 'label']
+
+			if sag_score_95_min == sag_score_95_max:
+				print('[SAG+]: Using label instead of score')
+
+				gmm_pass_df = mg_bayes_df.loc[mg_bayes_df['label'
+												].isin(sag_95_labels_df['label'])
+												]
+			else:
+				gmm_pass_df = mg_bayes_df.loc[(mg_bayes_df['score'] >= sag_score_95_min) &
+												(mg_bayes_df['score'] <= sag_score_95_max)
+												]
+			
+			'''
 			gmm = GMM(n_components=min_aic_comp, random_state=42
 							).fit(mg_rpkm_pass_df.values, mg_rpkm_pass_df.index
 							)
-			print('[SAG+]: GMM Converged: ', gmm.converged_)
 			sag_scores = gmm.score_samples(mg_rpkm_pass_df.values)
 			sag_scores_df = pd.DataFrame(data=sag_scores, index=mg_rpkm_pass_df.index)
+			sag_scores_IQR05 = sag_scores_df.quantile(0.05).values[0]
+			sag_scores_IQR95 = sag_scores_df.quantile(0.95).values[0]
 			sag_score_min = min(sag_scores_df.values)[0]
 			sag_score_max = max(sag_scores_df.values)[0]
+
 			mg_scores = gmm.score_samples(mg_rpkm_test_df.values)
 			mg_scores_df = pd.DataFrame(data=mg_scores, index=mg_rpkm_test_df.index)
-			gmm_pass_df = mg_scores_df.loc[(mg_scores_df[0] >= sag_score_min) &
-											(mg_scores_df[0] <= sag_score_max)
+			gmm_pass_df = mg_scores_df.loc[(mg_scores_df[0] >= sag_scores_IQR05) &
+											(mg_scores_df[0] <= sag_scores_IQR95)
 											]
-
+			'''
+			
 			pass_list = []
 			for md_nm in gmm_pass_df.index.values:
 				pass_list.append([sag_id, md_nm, md_nm.rsplit('_', 1)[0]])
