@@ -94,7 +94,7 @@ for rpkm_file in rpkm_file_list:
 							)
 	rpkm_df_list.append(file_df)
 rpkm_concat_df = pd.concat(rpkm_df_list)
-
+'''
 # Tetra GMM
 tetra_path = joinpath(files_path, 'tetra_recruits/')
 tetra_df_list = []
@@ -116,12 +116,16 @@ print('loading combined files')
 final_df = pd.read_csv(final_file, sep='\t', header=0, index_col=0,
 							names=['sag_id', 'subcontig_id', 'contig_id']
 							)
-
+'''
 mh_concat_df['algorithm'] = 'MinHash'
 rpkm_concat_df['algorithm'] = 'RPKM'
+final_concat_df = pd.concat([mh_concat_df, rpkm_concat_df])
+
+'''
 tetra_concat_df['algorithm'] = 'tetra_GMM'
 final_df['algorithm'] = 'combined'
 final_concat_df = pd.concat([mh_concat_df, rpkm_concat_df, tetra_concat_df, final_df])
+'''
 final_group_df = final_concat_df.groupby(['sag_id', 'algorithm', 'contig_id'])[
 											'subcontig_id'].count().reset_index()
 print('merging all')
@@ -133,9 +137,11 @@ sag_cnt_dict = final_tax_df.groupby('sag_id')['sag_id'].count().to_dict()
 #final_tax_df.sort_values('contig_count', ascending=True, inplace=True)
 
 error_list = []
-algo_list = ['MinHash', 'RPKM', 'tetra_GMM', 'combined']
+#algo_list = ['MinHash', 'RPKM', 'tetra_GMM', 'combined']
+algo_list = ['MinHash', 'RPKM']
 level_list = ['genus', 'species', 'strain', 'CAMI_genomeID']
-for i, sag_id in enumerate(list(final_tax_df['sag_id'].unique())):
+#for i, sag_id in enumerate(list(final_tax_df['sag_id'].unique())):
+for i, sag_id in enumerate(list(rpkm_concat_df['sag_id'].unique())):
 	sag_key_list = [str(s) for s in set(tax_mg_df['CAMI_genomeID']) if str(s) in sag_id]
 	sag_key = max(sag_key_list, key=len)
 	sag_sub_df = final_tax_df.loc[final_tax_df['sag_id'] == sag_id]
@@ -204,7 +210,7 @@ for level in set(calc_stats_df['level']):
 # build multi-level precision boxplot
 level_list = ['genus', 'species', 'strain', 'perfect']
 stat_list = ['precision', 'sensitivity', 'F1_score']
-comb_stat_df = calc_stats_df.loc[((calc_stats_df['algorithm'] == 'combined') & 
+comb_stat_df = calc_stats_df.loc[((calc_stats_df['algorithm'] == 'RPKM') & 
 									(calc_stats_df['level'].isin(level_list)) &
 									(calc_stats_df['statistic'].isin(stat_list))
 									)]
