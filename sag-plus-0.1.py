@@ -136,7 +136,7 @@ def mock_SAG(fasta_file):
 
 def main():
 
-	sag_path = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/source_genomes/'
+	sag_path = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/source_genomes/1036668.gt1kb.fasta'
 	mg_file = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/CAMI_high_GoldStandardAssembly.fasta'
 	mg_rpkm_file = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/RPKMs/CAMI_high_GoldStandardAssembly.rpkm.tsv'
 	max_contig_len = 10000
@@ -370,7 +370,7 @@ def main():
 			mg_rpkm_test_df = normed_rpkm_df[
 										~normed_rpkm_df.index.isin(mh_cntg_pass_list)
 										]
-
+			'''
 			n_components = np.arange(1, 100, 1)
 			models = [GMM(n, random_state=42)
 				  for n in n_components]
@@ -400,8 +400,7 @@ def main():
 					)
 
 			print('[SAG+]: Using AIC as guide for GMM components')
-			print('[SAG+]: Training GMM on RPKMs of MinHash recruits')
-			
+			print('[SAG+]: Training BayGMM on RPKMs of MinHash recruits')
 			bayes_gmm = BayGMM(n_components=min_aic_comp, 
 								max_iter=len(mg_rpkm_pass_df.index), random_state=42
 								).fit(mg_rpkm_pass_df.values, mg_rpkm_pass_df.index
@@ -415,10 +414,10 @@ def main():
 			sag_pred_cnt_df['percent'] = [x/sum(sag_pred_cnt_df['count'])
 											for x in sag_pred_cnt_df['count']
 											]
-			sag_95_labels_df = sag_pred_cnt_df.loc[sag_pred_cnt_df['count'] > 1]
+			sag_95_labels_df = sag_pred_cnt_df.loc[sag_pred_cnt_df['percent'] > 0.0]
 			sag_95_index_list = [x[0] for x in zip(sag_predict_df['index'],
 												sag_predict_df['label']
-												) if x[1] in sag_95_labels_df['label']
+												) if x[1] in list(sag_95_labels_df['label'])
 												]
 			sag_scores = bayes_gmm.score_samples(mg_rpkm_pass_df.values)
 			sag_scores_df = pd.DataFrame(data=sag_scores, index=mg_rpkm_pass_df.index)
@@ -439,9 +438,13 @@ def main():
 												]
 			else:
 				gmm_pass_df = mg_bayes_df.loc[(mg_bayes_df['score'] >= sag_score_95_min) &
-												(mg_bayes_df['score'] <= sag_score_95_max)
+												(mg_bayes_df['score'] <= sag_score_95_max) &
+												(mg_bayes_df['label'].isin(
+																sag_95_labels_df['label']
+																))
 												]
 			
+			'''
 			'''
 			gmm = GMM(n_components=min_aic_comp, random_state=42
 							).fit(mg_rpkm_pass_df.values, mg_rpkm_pass_df.index
@@ -459,15 +462,16 @@ def main():
 											(mg_scores_df[0] <= sag_scores_IQR95)
 											]
 			'''
-			
+			'''
 			pass_list = []
-			for md_nm in gmm_pass_df.index.values:
+			mh_rpkm_indexes = set(list(gmm_pass_df.index.values) + list(mh_cntg_pass_list))
+			for md_nm in mh_rpkm_indexes:
 				pass_list.append([sag_id, md_nm, md_nm.rsplit('_', 1)[0]])
 			print('[SAG+]: Recruited %s subcontigs to %s' % (len(pass_list), sag_id))
 			with open(join(ara_path, sag_id + '.ara_recruits.tsv'), 'w') as ara_out:
 				ara_out.write('\n'.join(['\t'.join(x) for x in pass_list]))
-		rpkm_pass_list.extend(pass_list)
-		'''
+			<-rpkm_pass_list.extend(pass_list)
+			'''
 			mg_rpkm_pass_stat_df = mg_rpkm_pass_df.mean().reset_index()
 			mg_rpkm_pass_stat_df.columns = ['sample_id', 'mean']
 			mg_rpkm_pass_stat_df['std'] = list(mg_rpkm_pass_df.std())
@@ -482,8 +486,8 @@ def main():
 			mg_rpkm_pass_stat_df['IQ_99'] = list(mg_rpkm_pass_df.quantile(0.99))
 		
 			# Use passed MG from MHR to recruit more seqs
-			iqr_pass_df = mg_rpkm_trim_df.copy()
-			for i, col_nm in enumerate(mg_rpkm_trim_df.columns):
+			iqr_pass_df = mg_rpkm_test_df.copy()
+			for i, col_nm in enumerate(mg_rpkm_test_df.columns):
 				pass_stats = mg_rpkm_pass_stat_df.iloc[[i]]
 				pass_min = pass_stats['IQ_05'].values[0]
 				pass_max = pass_stats['IQ_95'].values[0]
@@ -500,7 +504,6 @@ def main():
 			with open(join(ara_path, sag_id + '.ara_recruits.tsv'), 'w') as ara_out:
 				ara_out.write('\n'.join(['\t'.join(x) for x in pass_list]))
 		rpkm_pass_list.extend(pass_list)
-		'''
 
 	rpkm_df = pd.DataFrame(rpkm_pass_list, columns=['sag_id', 'subcontig_id',
 													'contig_id'
@@ -718,7 +721,27 @@ def main():
 				data.extend(recruits_in.readlines())
 			join_data = '\n'.join(data).replace('\n\n', '\n')
 			cat_file.write(join_data)
-	'''
+		
+		# Use SPAdes to co-assemble mSAG and recruits
+		print('[SAG+]: Re-assembling SAG with final recruits using SPAdes')
+		spades_cmd = ['/home/rmclaughlin/bin/SPAdes-3.13.0-Linux/bin/spades.py',
+						'--sc', '-k', '21,33,55,77,99,127', '--careful', '--only-assembler',
+						'-o', join(asm_path, sag_id), '--trusted-contigs',
+						join(mocksag_path, sag_id + '.mockSAG.fasta'),
+						'--s1', join(final_path, sag_id + '.final_recruits.fasta')
+						]
+		run_spades = Popen(spades_cmd, stdout=PIPE)
+		print(run_spades.communicate()[0].decode())
+		move_cmd = ['mv', join(join(asm_path, sag_id),'scaffolds.fasta'),
+						join(asm_path, sag_id + '.asm.fasta')
+						]
+						
+		run_move = Popen(move_cmd, stdout=PIPE)
+		print(run_move.communicate()[0].decode())
+		clean_cmd = ['rm', '-rf', join(asm_path, sag_id)]
+		run_clean = Popen(clean_cmd, stdout=PIPE)
+		print(run_clean.communicate()[0].decode())
+		'''
 		# Use minimus2 to merge the SAG and the recruits into one assembly
 		toAmos_cmd = ['/home/rmclaughlin/bin/amos-3.1.0/bin/toAmos', '-s',
 						join(ext_path, sag_id + '.extend_SAG.fasta'), '-o',
@@ -746,15 +769,17 @@ def main():
 						]
 		run_clean = Popen(clean_cmd, stdout=PIPE)
 		print(run_clean.communicate()[0].decode())
+		'''
 	
 	# Run CheckM on all new rebuilt/updated SAGs
+	print('[SAG+]: Checking all new SAG quality using CheckM')
 	checkm_cmd = ['checkm', 'lineage_wf', '--tab_table', '-x',
 					'fasta', '--threads', '8', '--pplacer_threads', '8', '-f',
 					join(check_path, 'checkM_stdout.tsv'), asm_path, check_path
 					]
 	run_checkm = Popen(checkm_cmd, stdout=PIPE)
 	print(run_checkm.communicate()[0].decode())
-	'''
+	
 	
 if __name__ == "__main__":
 	main()
