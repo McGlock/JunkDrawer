@@ -69,9 +69,10 @@ pacbio_concat_df.drop('index', axis=1, inplace=True)
 # Concat the two DFs
 concat_df = pd.concat([loop_concat_df, pacbio_concat_df], ignore_index=True).reset_index()
 concat_df.drop('index', axis=1, inplace=True)
-taxonomy_list = [[y.rsplit('(', 1)[0] for y in x.split(';')]
-					for x in list(set(concat_df['Taxonomy']))
-					]
+linpath_list = list(concat_df['Taxonomy'])
+#taxonomy_list = [[y.rsplit('(', 1)[0] for y in x.split(';')]
+#					for x in linpath_list
+#					]
 
 # pull in silva lineage into dataframe
 silva_tax_df = pd.read_csv('/home/rmclaughlin/Hallam_Databases/formatted/mothur/' \
@@ -82,33 +83,44 @@ silva_tax_df['taxname'] = [x.rstrip(';').replace(' ', '_') if x.count(';') == 1
 							else x.rstrip(';').rsplit(';', 1)[1].replace(' ', '_')
 							for x in silva_tax_df['path']
 							]
-silva_tax_df.drop('path', axis=1, inplace=True)
+#silva_tax_df.drop('path', axis=1, inplace=True)
 taxpath_dict = {x:['domain', 'phylum', 'class', 'order',
 					'family', 'genus'] for x in
-					list(set(concat_df['Taxonomy']))
+					linpath_list
 					}
-
+include_clade_list = ['domain', 'phylum', 'class', 'order', 'family', 'genus']
 for taxpath in taxpath_dict.keys():
-	include_clade_list = taxpath_dict[taxpath]
 	for i, clade in enumerate(include_clade_list):
-		silva_clade_list = [x for x in list(silva_tax_df.loc[
-									silva_tax_df['rank'] == clade]['taxname'])
-									if x not in ['uncultured', 'unclassified']
-									]
-		taxpath_list = [y.rsplit('(', 1)[0] for y in taxpath.split(';')]
-		found_clade_list = list(set([x for x in taxpath_list if x in silva_clade_list]))
-		if len(found_clade_list) > 1:
-			t_cnt_list = []
-			for t in found_clade_list:
-				silva_cnt = silva_clade_list.count(t)
-				path_cnt = taxpath_list.count(t)
-				if silva_cnt == path_cnt:
-					new_list = [t]
-			found_clade_list = new_list
+		clade_silva_df = silva_tax_df.loc[silva_tax_df['rank'] == clade]
+		if i == 0:
+			silva_clade_list = [x for x in list(clade_silva_df['taxname'])
+										if x not in ['uncultured', 'unclassified']
+										]
+		else:
+			domain_id = taxpath_dict[taxpath][0]
+			dom_clade_silva_df = clade_silva_df.loc[
+											clade_silva_df['path'].str.contains(domain_id)
+											]
+			silva_clade_list = [x for x in list(dom_clade_silva_df['taxname'])
+										if x not in ['uncultured', 'unclassified']
+										]
+
+		taxpath_list = [y.rsplit('(', 1)[0] for y in taxpath.split(';') if str(y) != '']
+		found_clade_list = [x for x in taxpath_list if x in silva_clade_list]
+		if len(found_clade_list) > 1: # deal with repeat names in multiple ranks
+			silva_cnt = silva_clade_list.count(found_clade_list[0])
+			path_cnt = taxpath_list.count(found_clade_list[0])
+			if 'Incertae_Sedis' in found_clade_list:
+				found_clade_list = [x for x in found_clade_list if x != 'Incertae_Sedis']
+				taxpath_dict[taxpath][i] = found_clade_list[0]
+			elif silva_cnt == path_cnt:
+				taxpath_dict[taxpath][i] = found_clade_list[0]
+			elif silva_cnt != path_cnt:
+				taxpath_dict[taxpath][i] = found_clade_list[-1]
+
+		elif len(found_clade_list) == 1: # if one match found
 			taxpath_dict[taxpath][i] = found_clade_list[0]
-		elif len(found_clade_list) == 1:
-			taxpath_dict[taxpath][i] = found_clade_list[0]
-		elif len(found_clade_list) < 1:
+		elif len(found_clade_list) == 0: # if nothing found build unclassifed rank name
 			if i == 0:
 				unclass_label = 'unclassified'
 			elif i > 0:
@@ -167,24 +179,30 @@ filter_df['Phyl_label'] = ['*'+x[0]+'*' if x[1] == True else x[0]
 filter_df = filter_df[filter_df['Domain'] != 'Eukaryota']
 
 # Order phylum by domain
-dom_phy_list = zip(filter_df['Domain'], filter_df['Phyl_label'])
-sort_dom_phy_list = sorted(set(dom_phy_list), key=itemgetter(1), reverse=True)
-sort_dom_phy_list.sort(key=itemgetter(0))
-phylum_set = [x[1] for x in sort_dom_phy_list if '*' not in x[1]]
-# add Candidates to end
-#cand_phy_list = [x[1] for x in sort_dom_phy_list if '*' in x[1]]
-#cand_phy_list.extend(phylum_set)
-#phylum_set = cand_phy_list
+with open('/home/rmclaughlin/LoopG/Ryan_work/code/taxa_order_list.txt', 'r') as t:
+	phylum_order_list = [x.strip('\n') for x in t.readlines()]
+sorterIndex = dict(zip(phylum_order_list, range(len(phylum_order_list))))
+filter_df['phy_rank'] = filter_df['Phylum'].map(sorterIndex)
+filter_df.sort_values(by=['phy_rank'], ascending=[False], inplace=True)
+filter_df = filter_df.loc[filter_df['Size'] > 1]
 
+#filter_df.drop('phy_rank', 1, inplace=True)
+#dom_phy_list = zip(filter_df['Domain'], filter_df['Phyl_label'])
+#sort_dom_phy_list = sorted(set(dom_phy_list), key=itemgetter(1), reverse=True)
+#sort_dom_phy_list.sort(key=itemgetter(0))
+sort_dom_phy_list = filter_df['Phyl_label'].drop_duplicates()
+phylum_set = [x for x in sort_dom_phy_list if '*' not in x]
+cand_set = [x for x in sort_dom_phy_list if '*' in x]
 # Order class by domain
-dom_cla_list = zip(filter_df['Domain'], filter_df['Phyl_Cla_label'])
-sort_dom_cla_list = sorted(set(dom_cla_list), key=itemgetter(1), reverse=True)
-sort_dom_cla_list.sort(key=itemgetter(0))
-class_set = [x[1] for x in sort_dom_cla_list if '*' not in x[1]]
-# add Candidates to end
-#cand_cla_list = [x[1] for x in sort_dom_cla_list if '*' in x[1]]
-#cand_cla_list.extend(class_set)
-#class_set = cand_cla_list
+with open('/home/rmclaughlin/LoopG/Ryan_work/code/taxa_class_list.txt', 'r') as t:
+	phy_cla_filter_list = [x.strip('\n') for x in t.readlines()]
+phy_cla_filter_df = filter_df.loc[filter_df['Phylum'].isin(phy_cla_filter_list)]
+phy_cla_filter_df.sort_values(by=['phy_rank', 'Phyl_Cla_label'], ascending=[False, False],
+								inplace=True
+								)
+sort_dom_cla_list = phy_cla_filter_df['Phyl_Cla_label'].drop_duplicates()
+class_set = [x for x in sort_dom_cla_list if '*' not in x]
+
 
 seqtype_list = list(set(filter_df['seqtype']))
 domain_list = list(set(filter_df['Domain']))
@@ -198,28 +216,49 @@ for seqtype in seqtype_list:
 	depth_sum_dict = seqtype_df.groupby(['depth'])['Size'].sum().to_dict()
 	seqtype_df['depth_sum'] = [depth_sum_dict[x] for x in seqtype_df['depth']]
 	seqtype_df['size_prop'] = (seqtype_df['Size']/seqtype_df['depth_sum'])*100
-	#seqtype_df = seqtype_df.loc[seqtype_df['Size'] > 1]
+	#HA_seqtype_df = seqtype_df.loc[seqtype_df['size_prop'] > 0.1]
 
 	# group candiate groups
 	cand_phy_df = seqtype_df.loc[seqtype_df['candidate'] == True]
+	depth_sum_dict = cand_phy_df.groupby(['depth'])['Size'].sum().to_dict()
+	cand_phy_df['depth_sum'] = [depth_sum_dict[x] for x in cand_phy_df['depth']]
+	cand_phy_df['cand_size_prop'] = (cand_phy_df['Size']/cand_phy_df['depth_sum'])*100
 	grp_cand_df = cand_phy_df.groupby(['depth'])['size_prop', 'Size'].sum().reset_index()
 	grp_cand_df['Phylum'] = 'Candidate Groups'
 	grp_cand_df['Phyl_label'] = 'Candidate Groups'
+	grp_cand_df['Phyl_Cla_label'] = 'Candidate Groups'
 	grp_cand_df['candidate'] = True
 	phylum_set.insert(0, 'Candidate Groups')
 	class_set.insert(0, 'Candidate Groups')
 
+	'''
+	# add low abundance OTUs back 
+	LA_seqtype_df = seqtype_df.loc[seqtype_df['size_prop'] <= 0.1]
+	grp_LA_df = LA_seqtype_df.groupby(['depth'])['size_prop', 'Size'].sum().reset_index()
+	grp_LA_df['Phylum'] = 'Low Abundance (<0.1%)'
+	grp_LA_df['Phyl_label'] = 'Low Abundance (<0.1%)'
+	grp_LA_df['Phyl_Cla_label'] = 'Low Abundance (<0.1%)'
+	grp_LA_df['candidate'] = False
+	phylum_set.insert(0, 'Low Abundance (<0.1%)')
+	class_set.insert(0, 'Low Abundance (<0.1%)')
+	'''
+
 	# add grouped candidates to final df
-	add_cand_df = pd.concat([seqtype_df.loc[seqtype_df['candidate'] == False], grp_cand_df])
+	add_cand_df = pd.concat([seqtype_df.loc[seqtype_df['candidate'] == False],
+								grp_cand_df]) # , grp_LA_df])
 
 	# build class and phylum level df	
-	class_df = add_cand_df.groupby(['Phylum', 'Phyl_Cla_label', 'depth', 'candidate']
-									)['size_prop', 'Size'].sum().reset_index()
+	class_df = add_cand_df.loc[add_cand_df['Phyl_Cla_label'].isin(class_set)
+											].groupby(['Phyl_Cla_label',
+														'depth', 'candidate']
+											)['size_prop', 'Size'].sum().reset_index()
 	phylum_df = add_cand_df.groupby(['Phylum', 'Phyl_label', 'depth', 'candidate']
-									)['size_prop', 'Size'].sum().reset_index()			
+									)['size_prop', 'Size'].sum().reset_index()
 
 	phylum_set.insert(0, '')
 	phylum_set.append('')
+	cand_set.insert(0, '')
+	cand_set.append('')
 	class_set.insert(0, '')
 	class_set.append('')
 
@@ -317,6 +356,53 @@ for seqtype in seqtype_list:
 					)
 	plt.clf()
 
+	# Candidates % plot
+	cand_y_dict = dict((y[1], y[0]) for y in enumerate(cand_set))
+	depth_order_list = ['30M', '36M', '40M', '45M', '50M', '60M', '80M', '120M']
+	x_dict = dict((x[1], x[0]) for x in enumerate(depth_order_list))
+
+	cand_phy_df['x_index'] = [x_dict[x] for x in cand_phy_df['depth']]
+	cand_phy_df['y_index'] = [cand_y_dict[y] for y in cand_phy_df['Phyl_label']]
+
+	legend_markers = [scatter([0], [0], marker='o',label='<0.1', color='k'),
+					scatter([0], [0], marker='o',label='1', color='k'),
+					scatter([0], [0], marker='o',label='10', color='k'),
+					scatter([0], [0], marker='o',label='25', color='k'),
+					scatter([0], [0], marker='o',label='50', color='k'),
+					scatter([0], [0], marker='o',label='100', color='k')
+					]
+	plt.figure(figsize=(6,8))
+	plt.grid(zorder=0)
+	scaler = 5
+	plt.scatter(x = cand_phy_df['x_index'],
+	            y = cand_phy_df['y_index'],
+	            s = cand_phy_df['cand_size_prop']*scaler,
+	            color='k',
+	            alpha = 1, zorder=3)
+
+	x_ticks = [x_dict[x] for x in x_dict.keys()]
+	x_labels = [l for l in list(x_dict.keys())]
+	plt.xticks(x_ticks, x_labels)
+
+	y_ticks = [cand_y_dict[y] for y in cand_y_dict.keys()]
+	y_labels = [l for l in list(cand_y_dict.keys())]
+	plt.tick_params(axis='both', labelsize=10)
+	plt.yticks(y_ticks, y_labels)
+	lgnd = plt.legend(title='Percent', handles=legend_markers, bbox_to_anchor=(1.05, 1),
+						loc=2, borderaxespad=0., scatterpoints=1, fontsize=10,
+						labelspacing=2, borderpad=4
+						)
+	lgnd.legendHandles[0]._sizes = [0.1*scaler]
+	lgnd.legendHandles[1]._sizes = [1*scaler]
+	lgnd.legendHandles[2]._sizes = [10*scaler]
+	lgnd.legendHandles[3]._sizes = [25*scaler]
+	lgnd.legendHandles[4]._sizes = [50*scaler]
+	lgnd.legendHandles[5]._sizes = [100*scaler]
+	plt.savefig('/home/rmclaughlin/LoopG/Ryan_work/code/' + seqtype +
+					'_Depth_Candidate_Percent.svg', bbox_inches='tight'
+					)
+	plt.clf()
+
 	# Phylum Raw Count
 	legend_markers = [scatter([0], [0], marker='o',label='<10', color='k'),
 					scatter([0], [0], marker='o',label='500', color='k'),
@@ -357,7 +443,6 @@ for seqtype in seqtype_list:
 				)
 	plt.clf()
 
-
 	# Class Raw Count
 	legend_markers = [scatter([0], [0], marker='o',label='<10', color='k'),
 					scatter([0], [0], marker='o',label='500', color='k'),
@@ -393,6 +478,48 @@ for seqtype in seqtype_list:
 	lgnd.legendHandles[3]._sizes = [2500*scaler]
 	lgnd.legendHandles[4]._sizes = [5000*scaler]
 	lgnd.legendHandles[5]._sizes = [10000*scaler]
+
 	plt.savefig('/home/rmclaughlin/LoopG/Ryan_work/code/' +	seqtype +
 				'_Depth_Class_raw_count.svg', bbox_inches='tight')
 	plt.clf()
+
+# Candidate Raw Count
+	legend_markers = [scatter([0], [0], marker='o',label='<10', color='k'),
+					scatter([0], [0], marker='o',label='500', color='k'),
+					scatter([0], [0], marker='o',label='1000', color='k'),
+					scatter([0], [0], marker='o',label='2500', color='k'),
+					scatter([0], [0], marker='o',label='5000', color='k'),
+					scatter([0], [0], marker='o',label='10000', color='k')
+					]
+	plt.figure(figsize=(6,8))
+	plt.grid(zorder=0)
+	scaler = 0.05
+	plt.scatter(x = cand_phy_df['x_index'],
+	            y = cand_phy_df['y_index'],
+	            s = cand_phy_df['Size']*scaler,
+	            color='k',
+	            alpha = 1, zorder=3)
+
+	x_ticks = [x_dict[x] for x in x_dict.keys()]
+	x_labels = [l for l in list(x_dict.keys())]
+	plt.xticks(x_ticks, x_labels)
+
+	y_ticks = [cand_y_dict[y] for y in cand_y_dict.keys()]
+	y_labels = [l for l in list(cand_y_dict.keys())]
+	plt.tick_params(axis='both', labelsize=10)
+	plt.yticks(y_ticks, y_labels)
+	lgnd = plt.legend(title='# of OTUs', handles=legend_markers, bbox_to_anchor=(1.05, 1),
+						loc=2, borderaxespad=0., scatterpoints=1, fontsize=10,
+						labelspacing=2, borderpad=4
+						)
+	lgnd.legendHandles[0]._sizes = [10*scaler]
+	lgnd.legendHandles[1]._sizes = [500*scaler]
+	lgnd.legendHandles[2]._sizes = [1000*scaler]
+	lgnd.legendHandles[3]._sizes = [2500*scaler]
+	lgnd.legendHandles[4]._sizes = [5000*scaler]
+	lgnd.legendHandles[5]._sizes = [10000*scaler]
+	plt.savefig('/home/rmclaughlin/LoopG/Ryan_work/code/' +	seqtype +
+				'_Depth_Candidate_raw_count.svg', bbox_inches='tight'
+				)
+	plt.clf()
+
