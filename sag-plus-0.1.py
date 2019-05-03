@@ -136,7 +136,7 @@ def mock_SAG(fasta_file):
 
 def main():
 
-	sag_path = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/source_genomes/1036668.gt1kb.fasta'
+	sag_path = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/source_genomes/'
 	mg_file = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/CAMI_high_GoldStandardAssembly.fasta'
 	mg_rpkm_file = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/RPKMs/CAMI_high_GoldStandardAssembly.rpkm.tsv'
 	max_contig_len = 10000
@@ -484,13 +484,19 @@ def main():
 			mg_rpkm_pass_stat_df['IQ_95'] = list(mg_rpkm_pass_df.quantile(0.95))
 			mg_rpkm_pass_stat_df['IQ_01'] = list(mg_rpkm_pass_df.quantile(0.01))
 			mg_rpkm_pass_stat_df['IQ_99'] = list(mg_rpkm_pass_df.quantile(0.99))
-		
+			mg_rpkm_pass_stat_df['IQR'] = mg_rpkm_pass_stat_df['IQ_75'] - \
+											mg_rpkm_pass_stat_df['IQ_25']
+			mg_rpkm_pass_stat_df['upper_bound'] = mg_rpkm_pass_stat_df['IQ_75'] + \
+													(1.5 * mg_rpkm_pass_stat_df['IQR'])
+			mg_rpkm_pass_stat_df['lower_bound'] = mg_rpkm_pass_stat_df['IQ_75'] - \
+													(1.5 * mg_rpkm_pass_stat_df['IQR'])
+
 			# Use passed MG from MHR to recruit more seqs
 			iqr_pass_df = mg_rpkm_test_df.copy()
 			for i, col_nm in enumerate(mg_rpkm_test_df.columns):
 				pass_stats = mg_rpkm_pass_stat_df.iloc[[i]]
-				pass_min = pass_stats['IQ_05'].values[0]
-				pass_max = pass_stats['IQ_95'].values[0]
+				pass_min = pass_stats['upper_bound'].values[0]
+				pass_max = pass_stats['lower_bound'].values[0]
 				iqr_pass_df = iqr_pass_df.loc[(iqr_pass_df[col_nm] >= pass_min) &
 												(iqr_pass_df[col_nm] <= pass_max)
 												]
@@ -721,7 +727,7 @@ def main():
 				data.extend(recruits_in.readlines())
 			join_data = '\n'.join(data).replace('\n\n', '\n')
 			cat_file.write(join_data)
-		
+		'''
 		# Use SPAdes to co-assemble mSAG and recruits
 		print('[SAG+]: Re-assembling SAG with final recruits using SPAdes')
 		spades_cmd = ['/home/rmclaughlin/bin/SPAdes-3.13.0-Linux/bin/spades.py',
@@ -741,6 +747,7 @@ def main():
 		clean_cmd = ['rm', '-rf', join(asm_path, sag_id)]
 		run_clean = Popen(clean_cmd, stdout=PIPE)
 		print(run_clean.communicate()[0].decode())
+		'''
 		'''
 		# Use minimus2 to merge the SAG and the recruits into one assembly
 		toAmos_cmd = ['/home/rmclaughlin/bin/amos-3.1.0/bin/toAmos', '-s',
