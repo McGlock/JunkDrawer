@@ -198,9 +198,14 @@ calc_stats_df.to_csv('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + 
 for level in set(calc_stats_df['level']):
 	level_df = calc_stats_df.loc[calc_stats_df['level'] == level]
 	sns.set_context("paper")
-	ax = sns.catplot(x="statistic", y="score", hue='algorithm', kind='box',
+	ax = sns.catplot(x="statistic", y="score", hue='algorithm', kind='violin',
 						data=level_df, aspect=2
 						)
+	
+	plt.plot([-1, 6], [0.25, 0.25], linestyle='--', alpha=0.3, color='k')
+	plt.plot([-1, 6], [0.50, 0.50], linestyle='--', alpha=0.3, color='k')
+	plt.plot([-1, 6], [0.75, 0.75], linestyle='--', alpha=0.3, color='k')
+
 	plt.ylim(0, 1)
 	plt.title('SAG-plus CAMI-1-High error analysis')
 	ax._legend.set_title('Filter Type')
@@ -218,11 +223,17 @@ comb_stat_df = calc_stats_df.loc[((calc_stats_df['algorithm'] == 'combined') &
 									(calc_stats_df['statistic'].isin(stat_list))
 									)]
 sns.set_context("paper")
-ax = sns.catplot( x="level", y="score", hue='statistic', kind='box',
+ax = sns.catplot( x="level", y="score", hue='statistic', kind='violin',
 					data=comb_stat_df, aspect=2
 					)
+
+plt.plot([-1, 4], [0.25, 0.25], linestyle='--', alpha=0.3, color='k')
+plt.plot([-1, 4], [0.50, 0.50], linestyle='--', alpha=0.3, color='k')
+plt.plot([-1, 4], [0.75, 0.75], linestyle='--', alpha=0.3, color='k')
+
 plt.ylim(0, 1)
 plt.title('SAG-plus CAMI-1-High')
+
 plt.savefig('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + \
 			'error_analysis/multi-level_precision_boxplox.svg', bbox_inches='tight'
 			)
