@@ -34,7 +34,7 @@ def calc_err(df):
 	return stack_df
 
 # Map genome id and contig id to taxid for error analysis
-sag_tax_map = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/genome_taxa_info.tsv'
+sag_tax_map = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/genome_taxa_info.tsv'
 sag_taxmap_df = pd.read_csv(sag_tax_map, sep='\t', header=0)
 sag_taxmap_df['sp_taxid'] = [int(x) for x in sag_taxmap_df['@@TAXID']]
 sag_taxmap_df['sp_name'] = [x.split('|')[-2] for x in sag_taxmap_df['TAXPATHSN']]
@@ -50,7 +50,7 @@ taxpath_df['species'] = [x[1] if str(x[0]) == '' else x[0] for x in
 							zip(taxpath_df['species'], taxpath_df['genus'])
 							]
 # Map MetaG contigs to their genomes
-mg_contig_map = '/home/rmclaughlin/Ryan/CAMI_gold/CAMI_I_HIGH/' + \
+mg_contig_map = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/' + \
 				'gsa_mapping_pool.binning.trimmed'
 mg_contig_map_df = pd.read_csv(mg_contig_map, sep='\t', header=0)
 mg_contig_map_df['TAXID'] = [str(x) for x in mg_contig_map_df['TAXID']]
@@ -114,12 +114,13 @@ tetra_concat_df = pd.concat(tetra_df_list)
 final_file = joinpath(files_path, 'final_recruits/final_recruits.tsv')
 print('loading combined files')
 final_df = pd.read_csv(final_file, sep='\t', header=0, index_col=0,
-							names=['sag_id', 'subcontig_id', 'contig_id']
+							names=['sag_id', 'contig_id']
 							)
+final_df['subcontig_id'] = None
 
 mh_concat_df['algorithm'] = 'MinHash'
 rpkm_concat_df['algorithm'] = 'RPKM'
-final_concat_df = pd.concat([mh_concat_df, rpkm_concat_df])
+#final_concat_df = pd.concat([mh_concat_df, rpkm_concat_df])
 
 
 tetra_concat_df['algorithm'] = 'tetra_GMM'
@@ -127,6 +128,11 @@ final_df['algorithm'] = 'combined'
 final_concat_df = pd.concat([mh_concat_df, rpkm_concat_df, tetra_concat_df, final_df])
 final_group_df = final_concat_df.groupby(['sag_id', 'algorithm', 'contig_id'])[
 											'subcontig_id'].count().reset_index()
+print(mh_concat_df.head())
+print(rpkm_concat_df.head())
+print(tetra_concat_df.head())
+print(final_df.head())
+
 print('merging all')
 final_tax_df = final_group_df.merge(tax_mg_df, left_on='contig_id', right_on='@@SEQUENCEID',
 								how='left'
@@ -134,7 +140,6 @@ final_tax_df = final_group_df.merge(tax_mg_df, left_on='contig_id', right_on='@@
 sag_cnt_dict = final_tax_df.groupby('sag_id')['sag_id'].count().to_dict()
 #final_tax_df['contig_count'] = [sag_cnt_dict[x] for x in final_tax_df['sag_id']]
 #final_tax_df.sort_values('contig_count', ascending=True, inplace=True)
-
 error_list = []
 algo_list = ['MinHash', 'RPKM', 'tetra_GMM', 'combined']
 level_list = ['genus', 'species', 'strain', 'CAMI_genomeID']
