@@ -1,3 +1,7 @@
+import matplotlib
+matplotlib.use('agg')
+import seaborn as sns
+import matplotlib.pyplot as plt
 import sys
 from os import listdir, makedirs, path
 from os.path import isfile, join, isdir, basename, dirname
@@ -13,8 +17,6 @@ from collections import Counter
 from subprocess import Popen, PIPE
 from sklearn.mixture import BayesianGaussianMixture as BayGMM
 import pickle
-
-
 
 
 def kmer_slide(seq_list, n, o_lap):
@@ -137,12 +139,17 @@ def mock_SAG(fasta_file, chunk_num):
 
 def main():
 
-	sag_path = '/home/rmclaughlin/Ryan/CAMI_I_HIGH/source_genomes/'
+	sag_path = '/home/rmclaughlin/Ryan/CAMI_I_HIGH/source_genomes/1021_AC_run134.final.scaffolds.gt1kb.fasta'
 	mg_file = '/home/rmclaughlin/Ryan/CAMI_I_HIGH/CAMI_high_GoldStandardAssembly.fasta'
 	mg_rpkm_file = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/RPKMs/CAMI_high_GoldStandardAssembly.rpkm.tsv'
 	max_contig_len = 10000
 	overlap_len = 2000
-	save_path = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/'
+
+	# for testing
+	msag_chunk = 10 # i.e. 2 = 50% , 5 = 20%, 10 = 10%, ...
+	save_path = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/51_51/' + str(msag_chunk) + '/'
+	
+	###############
 	mocksag_path = join(save_path, 'mockSAGs')
 	subcontig_path = join(save_path, 'subcontigs')
 	sig_path = join(save_path, 'signatures')
@@ -154,13 +161,7 @@ def main():
 	asm_path = join(save_path, 're-assembled')
 	check_path = join(save_path, 'checkM')
 
-
-	# Relic of error analysis
-	# contig_tax_map = '/home/rmclaughlin/Ryan/CAMI_I_HIGH/gsa_mapping_pool.binning.trimmed'
-	# sag_tax_map = '/home/rmclaughlin/Ryan/CAMI_I_HIGH/genome_taxa_info.tsv'
-	
 	num_components = 20
-
 	# Check if dirs exist, make them if they don't
 	if not path.exists(save_path):
 		makedirs(save_path)
@@ -198,7 +199,7 @@ def main():
 		sag_list = [sag_path]
 	# TODO: subcontig function has issue with trailing kmers, needs to stop at last 10K
 	# Build Mock SAGs (for testing only), else extract all SAG contigs and headers
-	test = True
+	test = True # (for testing only)
 	print('[SAG+]: Loading/Building subcontigs for all SAGs')
 	sag_contigs_dict = {}
 	sag_subcontigs_dict = {}
@@ -209,7 +210,7 @@ def main():
 			if isfile(join(mocksag_path, sag_id + '.mockSAG.fasta')):
 				sag_contigs = get_seqs(join(mocksag_path, sag_id + '.mockSAG.fasta'))
 			else:
-				sag_contigs = mock_SAG(sag_file, 2) # run 2, 3, 5, 10 (50%, 33%, 20%, 10%)
+				sag_contigs = mock_SAG(sag_file, msag_chunk) # run 2, 3, 5, 10 (50%, 33%, 20%, 10%)
 				with open(join(mocksag_path, sag_id + '.mockSAG.fasta'), 'w') as mock_out:
 					seq_rec_list = ['\n'.join(['>'+rec[0], rec[1]]) for rec in sag_contigs]
 					mock_out.write('\n'.join(seq_rec_list))
@@ -336,7 +337,6 @@ def main():
 	# NOTE: This is built to accept output from 'join_rpkm_out.py' script
 	# TODO: Add RPKM cmd call to run within this script
 	# TODO: OR impliment Salmon TPM calculation software?
-	# TODO: Limit MinHash pass list to contigs with >= 0.51 subcontigs recruited
 	print('[SAG+]: Starting Abundance Recruitment Algorithm')
 
 	print('[SAG+]: Loading RPKM values for %s' % mg_id)
@@ -372,108 +372,7 @@ def main():
 			mg_rpkm_test_df = normed_rpkm_df[
 										~normed_rpkm_df.index.isin(mh_cntg_pass_list)
 										]
-			'''
-			n_components = np.arange(1, 100, 1)
-			models = [GMM(n, random_state=42)
-				  for n in n_components]
-			bics = []
-			aics = []
-			for i, model in enumerate(models):
-				n_comp = n_components[i]
-				try:
-					bic = model.fit(mg_rpkm_pass_df.values,
-									mg_rpkm_pass_df.index).bic(mg_rpkm_pass_df.values
-									)
-					bics.append(bic)
-				except:
-					print('[WARNING]: BIC failed with %s components' % n_comp)
-				try:
-					aic = model.fit(mg_rpkm_pass_df.values,
-									mg_rpkm_pass_df.index).aic(mg_rpkm_pass_df.values
-									)
-					aics.append(aic)
-				except:
-					print('[WARNING]: AIC failed with %s components' % n_comp)
-
-			min_bic_comp = n_components[bics.index(min(bics))]
-			min_aic_comp = n_components[aics.index(min(aics))]
-			print('[SAG+]: Min AIC/BIC at %s/%s, respectively' % 
-					(min_aic_comp, min_bic_comp)
-					)
-
-			print('[SAG+]: Using AIC as guide for GMM components')
-			print('[SAG+]: Training BayGMM on RPKMs of MinHash recruits')
-			bayes_gmm = BayGMM(n_components=min_aic_comp, 
-								max_iter=len(mg_rpkm_pass_df.index), random_state=42
-								).fit(mg_rpkm_pass_df.values, mg_rpkm_pass_df.index
-							)
-			sag_predict = bayes_gmm.predict(mg_rpkm_pass_df.values)
-			sag_predict_df = pd.DataFrame([x for x in 
-											zip(mg_rpkm_pass_df.index, sag_predict)
-											], columns=['index', 'label'])
-			sag_pred_cnt_df = sag_predict_df.groupby('label').count().reset_index()
-			sag_pred_cnt_df.columns = ['label', 'count']
-			sag_pred_cnt_df['percent'] = [x/sum(sag_pred_cnt_df['count'])
-											for x in sag_pred_cnt_df['count']
-											]
-			sag_95_labels_df = sag_pred_cnt_df.loc[sag_pred_cnt_df['percent'] > 0.0]
-			sag_95_index_list = [x[0] for x in zip(sag_predict_df['index'],
-												sag_predict_df['label']
-												) if x[1] in list(sag_95_labels_df['label'])
-												]
-			sag_scores = bayes_gmm.score_samples(mg_rpkm_pass_df.values)
-			sag_scores_df = pd.DataFrame(data=sag_scores, index=mg_rpkm_pass_df.index)
-			sag_scores_95_df = sag_scores_df.loc[sag_scores_df.index.isin(sag_95_index_list)]
-			sag_score_95_min = round(min(sag_scores_95_df.values)[0], 1)
-			sag_score_95_max = round(max(sag_scores_95_df.values)[0], 1)
-			mg_scores = bayes_gmm.score_samples(mg_rpkm_test_df.values)
-			mg_predict = bayes_gmm.predict(mg_rpkm_test_df.values)
-			mg_bayes_list = [x for x in zip(mg_scores, mg_predict)]
-			mg_bayes_df = pd.DataFrame(data=mg_bayes_list, index=mg_rpkm_test_df.index)
-			mg_bayes_df.columns = ['score', 'label']
-
-			if sag_score_95_min == sag_score_95_max:
-				print('[SAG+]: Using label instead of score')
-
-				gmm_pass_df = mg_bayes_df.loc[mg_bayes_df['label'
-												].isin(sag_95_labels_df['label'])
-												]
-			else:
-				gmm_pass_df = mg_bayes_df.loc[(mg_bayes_df['score'] >= sag_score_95_min) &
-												(mg_bayes_df['score'] <= sag_score_95_max) &
-												(mg_bayes_df['label'].isin(
-																sag_95_labels_df['label']
-																))
-												]
 			
-			'''
-			'''
-			gmm = GMM(n_components=min_aic_comp, random_state=42
-							).fit(mg_rpkm_pass_df.values, mg_rpkm_pass_df.index
-							)
-			sag_scores = gmm.score_samples(mg_rpkm_pass_df.values)
-			sag_scores_df = pd.DataFrame(data=sag_scores, index=mg_rpkm_pass_df.index)
-			sag_scores_IQR05 = sag_scores_df.quantile(0.05).values[0]
-			sag_scores_IQR95 = sag_scores_df.quantile(0.95).values[0]
-			sag_score_min = min(sag_scores_df.values)[0]
-			sag_score_max = max(sag_scores_df.values)[0]
-
-			mg_scores = gmm.score_samples(mg_rpkm_test_df.values)
-			mg_scores_df = pd.DataFrame(data=mg_scores, index=mg_rpkm_test_df.index)
-			gmm_pass_df = mg_scores_df.loc[(mg_scores_df[0] >= sag_scores_IQR05) &
-											(mg_scores_df[0] <= sag_scores_IQR95)
-											]
-			'''
-			'''
-			pass_list = []
-			mh_rpkm_indexes = set(list(gmm_pass_df.index.values) + list(mh_cntg_pass_list))
-			for md_nm in mh_rpkm_indexes:
-				pass_list.append([sag_id, md_nm, md_nm.rsplit('_', 1)[0]])
-			print('[SAG+]: Recruited %s subcontigs to %s' % (len(pass_list), sag_id))
-			with open(join(ara_path, sag_id + '.ara_recruits.tsv'), 'w') as ara_out:
-				ara_out.write('\n'.join(['\t'.join(x) for x in pass_list]))
-			<-rpkm_pass_list.extend(pass_list)
-			'''
 			mg_rpkm_pass_stat_df = mg_rpkm_pass_df.mean().reset_index()
 			mg_rpkm_pass_stat_df.columns = ['sample_id', 'mean']
 			mg_rpkm_pass_stat_df['std'] = list(mg_rpkm_pass_df.std())
@@ -556,7 +455,6 @@ def main():
 	#####################################################################################
 	# TODO: Think about using Minimum Description Length (MDL) instead of AIC/BIC
 	#		[Normalized Maximum Likelihood or Fish Information Approximation]
-	# TODO: Should SAG be included in training data?
 	# Build/Load tetramers for SAGs and MG subset by ara recruits
 	if isfile(join(tra_path, mg_id + '.tetras.tsv')):
 		print('[SAG+]: Loading tetramer Hz matrix for %s' % mg_id)
@@ -571,76 +469,6 @@ def main():
 		mg_tetra_df.to_csv(join(tra_path, mg_id + '.tetras.tsv'),
 							sep='\t'
 							)
-	''' [Doesn't seem to get a reasonable AIC value]
-	# Build UMAP df from MG (assuption that SAG came from same environment)
-	if isfile(join(tra_path, mg_id + '.gmm.pkl')):
-		print('[SAG+]: Loading GMM for %s' % mg_id)
-		with open(join(tra_path, mg_id + '.gmm.pkl'), 'rb') as p:
-				gmm = pickle.load(p)
-	else:
-		if isfile(join(tra_path, mg_id + '.umap.tsv')):
-			print('[SAG+]: Loading UMAP matrix for %s' % mg_id)
-			umap_df = pd.read_csv(join(tra_path, mg_id + '.umap.tsv'),
-									sep='\t',index_col=0, header=0
-									)
-		else:
-			normed_tetra_df = pd.DataFrame(normalize(mg_tetra_df.values),
-											columns=mg_tetra_df.columns,
-											index=mg_tetra_df.index
-											)
-			# UMAP for Dimension reduction of tetras
-			normed_features = normed_tetra_df.values
-			normed_targets = normed_tetra_df.index.values
-			print('[SAG+]: Dimension reduction of tetras with UMAP')
-			umap_trans = umap.UMAP(n_neighbors=15, min_dist=0.1,
-							n_components=num_components, metric='manhattan',
-							random_state=42
-							).fit_transform(normed_features)
-
-			pc_col_names = ['pc' + str(x) for x in range(1, num_components + 1)]
-			umap_df = pd.DataFrame(umap_trans, columns=pc_col_names, index=normed_targets)
-			umap_df.to_csv(join(tra_path, mg_id + '.umap.tsv'),
-								sep='\t'
-								)
-		n_components = np.arange(300, 850, 50)
-		models = [GMM(n, random_state=42)
-			  for n in n_components]
-		bics = []
-		aics = []
-		print('[SAG+]: Calculating optimal number of components for GMM')
-		for i, model in enumerate(models):
-			n_comp = n_components[i]
-			print(n_comp)
-			try:
-				bic = model.fit(umap_df.values,
-								umap_df.index).bic(umap_df.values
-								)
-				bics.append(bic)
-			except:
-				print('[WARNING]: BIC failed with %s components' % n_comp)
-			try:
-				aic = model.fit(umap_df.values,
-								umap_df.index).aic(umap_df.values
-								)
-				aics.append(aic)
-			except:
-				print('[WARNING]: AIC failed with %s components' % n_comp)
-
-		min_bic_comp = n_components[bics.index(min(bics))]
-		min_aic_comp = n_components[aics.index(min(aics))]
-		print('[SAG+]: Min AIC/BIC at %s/%s, respectively' % 
-				(min_aic_comp, min_bic_comp)
-				)
-		print('[SAG+]: Using AIC as guide for GMM components')
-		print('[SAG+]: Training GMM on SAG tetras')
-		gmm = GMM(n_components=min_aic_comp, random_state=42
-						).fit(umap_df.values, umap_df.index
-						)
-		print('[SAG+]: GMM Converged: ', gmm.converged_)
-		with open(join(tra_path, mg_id + '.gmm.pkl'), 'wb') as p:
-			pickle.dump(gmm, p)
-	sys.exit()
-	'''		
 
 	gmm_pass_list = []
 	for sag_id, sag_sub_tup in sag_subcontigs_dict.items():
@@ -690,7 +518,6 @@ def main():
 			mg_targets = mg_normed_tetra_df.index.values
 			normed_features = normed_tetra_df.values
 			normed_targets = normed_tetra_df.index.values
-			# TODO: pull out UMAP and run on entire MG dataset, then compare subset and mSAG to it.
 			print('[SAG+]: Dimension reduction of tetras with UMAP')
 			umap_trans = umap.UMAP(n_neighbors=2, min_dist=0.0,
 							n_components=num_components, metric='manhattan',
@@ -738,23 +565,47 @@ def main():
 			
 			sag_scores = gmm.score_samples(sag_umap_df.values)
 			sag_scores_df = pd.DataFrame(data=sag_scores, index=sag_targets)
-			print(sag_scores_df)
 			sag_score_min = min(sag_scores_df.values)[0]
 			sag_score_max = max(sag_scores_df.values)[0]
 			mg_scores = gmm.score_samples(mg_umap_df.values)
 			mg_scores_df = pd.DataFrame(data=mg_scores, index=mg_targets)
+
 			gmm_pass_df = mg_scores_df.loc[(mg_scores_df[0] >= sag_score_min) &
 											(mg_scores_df[0] <= sag_score_max)
 											]
 			pass_list = []
 			for md_nm in gmm_pass_df.index.values:
 				pass_list.append([sag_id, md_nm, md_nm.rsplit('_', 1)[0]])
+			
+			'''
+			##################################
+			# build scatterplot to viz the GMM
+			sag_xy_df = sag_umap_df.iloc[:,0:2].copy()
+			mg_xy_df = mg_umap_df.iloc[:,0:2].copy()
+			sag_xy_df['isSAG'] = 'SAG'
+			mg_xy_df['isSAG'] = ['Tetra-Recruit' if x in list(gmm_pass_df.index.values)
+									else 'MG' for x in mg_xy_df.index.values
+									]
+			recruits_xy_df = mg_xy_df[mg_xy_df['isSAG'] == 'Tetra-Recruit']
+			mg_xy_df = mg_xy_df[mg_xy_df['isSAG'] == 'MG']
+			xy_df = pd.concat([mg_xy_df, sag_xy_df, recruits_xy_df])
+			xy_df.to_csv(join(tra_path, sag_id + '.GMM_plot.tsv'), sep='\t')
+			sv_plot = join(tra_path, sag_id + '.GMM_plot.png')
+			ax = sns.scatterplot(x='pc1', y='pc2', data=xy_df, hue='isSAG',
+									alpha=0.4, edgecolor='none')
+			plt.gca().set_aspect('equal', 'datalim')
+			plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+			plt.savefig(sv_plot, bbox_inches="tight")
+			plt.clf()
+			##################################
+			'''
+
 			print('[SAG+]: Recruited %s subcontigs to %s' % (len(pass_list), sag_id))
 			with open(join(tra_path, sag_id + '.tra_recruits.tsv'), 'w') as tra_out:
 				tra_out.write('\n'.join(['\t'.join(x) for x in pass_list]))
 		gmm_pass_list.extend(pass_list)
 	gmm_df = pd.DataFrame(gmm_pass_list, columns=['sag_id', 'subcontig_id', 'contig_id'])
-
+	sys.exit()
 	#####################################################################################
 	#####################################################################################
 	#####################################################################################
@@ -796,7 +647,7 @@ def main():
 
 	# Merge MinHash and GMM Tetra (passed first by RPKM)
 	mh_gmm_merge_df = minhash_df[['sag_id', 'contig_id']].merge(
-									mg_max_only_df[['sag_id', 'contig_id']], how='outer',
+									gmm_df[['sag_id', 'contig_id']], how='outer', # mg_max_only_df
 									on=['sag_id', 'contig_id']
 									).drop_duplicates()
 
@@ -901,14 +752,12 @@ def main():
 		cisa_cmd = ['python2.7', '/home/rmclaughlin/bin/CISA1.3/CISA.py', cisa_config]
 		run_cisa = Popen(cisa_cmd, stdout=PIPE, cwd=asm_sag_path)
 		cisa_stdout = run_cisa.communicate()[0].decode()
-		#print(cisa_stdout)
-
-		move_cmd = ['mv', cisa_outfile,	join(asm_path, sag_id + '.asm.fasta')]						
+		print(cisa_stdout)
+		move_cmd = ['mv', cisa_outfile,	join(asm_path, sag_id + '.CISA.asm.fasta')]						
 		run_move = Popen(move_cmd, stdout=PIPE)
 		clean_cmd = ['rm', '-rf', asm_sag_path]
 		run_clean = Popen(clean_cmd, stdout=PIPE)
-
-		'''
+		
 		# Use SPAdes to co-assemble mSAG and recruits
 		print('[SAG+]: Re-assembling SAG with final recruits using SPAdes')
 		spades_cmd = ['/home/rmclaughlin/bin/SPAdes-3.13.0-Linux/bin/spades.py',
@@ -920,7 +769,7 @@ def main():
 		run_spades = Popen(spades_cmd, stdout=PIPE)
 		print(run_spades.communicate()[0].decode())
 		move_cmd = ['mv', join(join(asm_path, sag_id),'scaffolds.fasta'),
-						join(asm_path, sag_id + '.asm.fasta')
+						join(asm_path, sag_id + '.SPAdes.asm.fasta')
 						]
 						
 		run_move = Popen(move_cmd, stdout=PIPE)
@@ -928,9 +777,7 @@ def main():
 		clean_cmd = ['rm', '-rf', join(asm_path, sag_id)]
 		run_clean = Popen(clean_cmd, stdout=PIPE)
 		print(run_clean.communicate()[0].decode())
-		'''
 
-		'''
 		# Use minimus2 to merge the SAG and the recruits into one assembly
 		toAmos_cmd = ['/home/rmclaughlin/bin/amos-3.1.0/bin/toAmos', '-s',
 						join(ext_path, sag_id + '.extend_SAG.fasta'), '-o',
@@ -944,10 +791,23 @@ def main():
 						]
 		run_minimus = Popen(minimus_cmd, stdout=PIPE)
 		print(run_minimus.communicate()[0].decode())
+		if isfile(join(asm_path, sag_id + '.fasta')):
+			filenames = [join(asm_path, sag_id + '.fasta'), join(asm_path, sag_id + '.singletons.seq')]
+			with open(join(asm_path, sag_id + '.minimus2.asm.fasta'), 'w') as outfile:
+				for fname in filenames:
+					with open(fname) as infile:
+						for line in infile:
+							outfile.write(line)
+			move_cmd = ['mv', join(asm_path, sag_id + '.fasta'),
+						join(asm_path, sag_id + '.minimus2_no_singles.asm.fasta')
+						]
+						
+		run_move = Popen(move_cmd, stdout=PIPE)
 		clean_cmd = ['rm', '-r', join(asm_path, sag_id + '.runAmos.log'),
 						join(asm_path, sag_id + '.afg'),
 						join(asm_path, sag_id + '.OVL'),
 						join(asm_path, sag_id + '.singletons'),
+						join(asm_path, sag_id + '.singletons.seq'),
 						join(asm_path, sag_id + '.contig'),
 						join(asm_path, sag_id + '.ovl'),
 						join(asm_path, sag_id + '.coords'),
@@ -957,8 +817,6 @@ def main():
 						join(asm_path, sag_id + '.ref.seq')
 						]
 		run_clean = Popen(clean_cmd, stdout=PIPE)
-		print(run_clean.communicate()[0].decode())
-		'''
 	
 	# Run CheckM on all new rebuilt/updated SAGs
 	print('[SAG+]: Checking all new SAG quality using CheckM')

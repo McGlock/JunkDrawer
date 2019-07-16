@@ -9,6 +9,7 @@ from os.path import join as joinpath
 from functools import reduce
 import numpy as np
 from collections import Counter
+from os import listdir, makedirs, path
 
 
 def calc_err(df):
@@ -32,6 +33,7 @@ def calc_err(df):
 	stack_df = stats_df.stack().reset_index()
 	stack_df.columns = ['sag_id', 'algorithm', 'level', 'statistic', 'score']
 	return stack_df
+
 
 # Map genome id and contig id to taxid for error analysis
 sag_tax_map = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/genome_taxa_info.tsv'
@@ -62,7 +64,10 @@ tax_mg_df = taxpath_df.merge(mg_contig_map_df, left_on='CAMI_genomeID', right_on
 tax_mg_df = tax_mg_df[['@@SEQUENCEID', 'CAMI_genomeID', 'domain', 'phylum', 'class', 'order',
 						'family', 'genus', 'species', 'strain'
 						]]
-files_path = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/'
+files_path = sys.argv[1]
+err_path = files_path + '/error_analysis'
+if not path.exists(err_path):
+	makedirs(err_path)
 
 # Build error df from recruits files
 # MinHash
@@ -187,21 +192,19 @@ final_err_df = pd.DataFrame(error_list, columns=['sag_id', 'algorithm', 'level',
 													'FalseNeg', 'TrueNeg'
 													])
 
-final_err_df.to_csv('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + \
-					'error_analysis/All_error.tsv', index=False, sep='\t'
-					)
+final_err_df.to_csv(err_path + '/All_error.tsv', index=False, sep='\t')
 
 calc_stats_df = calc_err(final_err_df)
-calc_stats_df.to_csv('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + \
-					'error_analysis/All_stats.tsv', index=False, sep='\t'
-					)
+stat_list = ['precision', 'sensitivity', 'F1_score']
+calc_stats_df = calc_stats_df.loc[calc_stats_df['statistic'].isin(stat_list)]
+calc_stats_df.to_csv(err_path + '/All_stats.tsv', index=False, sep='\t')
 for level in set(calc_stats_df['level']):
 	level_df = calc_stats_df.loc[calc_stats_df['level'] == level]
 	sns.set_context("paper")
 	ax = sns.catplot(x="statistic", y="score", hue='algorithm', kind='box',
 						data=level_df, aspect=2
 						)
-	
+
 	plt.plot([-1, 6], [0.25, 0.25], linestyle='--', alpha=0.3, color='k')
 	plt.plot([-1, 6], [0.50, 0.50], linestyle='--', alpha=0.3, color='k')
 	plt.plot([-1, 6], [0.75, 0.75], linestyle='--', alpha=0.3, color='k')
@@ -209,8 +212,7 @@ for level in set(calc_stats_df['level']):
 	plt.ylim(0, 1)
 	plt.title('SAG-plus CAMI-1-High error analysis')
 	ax._legend.set_title('Filter Type')
-	plt.savefig('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + \
-				'error_analysis/' + level + '_error_boxplox.svg',
+	plt.savefig(err_path + '/' + level + '_error_boxplox.svg',
 				bbox_inches='tight'
 				)
 	plt.clf()
@@ -234,7 +236,7 @@ plt.plot([-1, 4], [0.75, 0.75], linestyle='--', alpha=0.3, color='k')
 plt.ylim(0, 1)
 plt.title('SAG-plus CAMI-1-High')
 
-plt.savefig('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + \
-			'error_analysis/multi-level_precision_boxplox.svg', bbox_inches='tight'
-			)
+plt.savefig(err_path + '/multi-level_precision_boxplox.svg',
+				bbox_inches='tight'
+				)
 plt.clf()
