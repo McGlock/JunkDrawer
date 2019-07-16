@@ -144,6 +144,10 @@ def main():
 	mg_rpkm_file = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/RPKMs/CAMI_high_GoldStandardAssembly.rpkm.tsv'
 	max_contig_len = 10000
 	overlap_len = 2000
+	rpkm_per_pass = 0.51
+	gmm_per_pass = 0.51
+	num_components = 20
+
 
 	# for testing
 	msag_chunk = 10 # i.e. 2 = 50% , 5 = 20%, 10 = 10%, ...
@@ -161,7 +165,6 @@ def main():
 	asm_path = join(save_path, 're-assembled')
 	check_path = join(save_path, 'checkM')
 
-	num_components = 20
 	# Check if dirs exist, make them if they don't
 	if not path.exists(save_path):
 		makedirs(save_path)
@@ -430,7 +433,7 @@ def main():
 											rpkm_recruit_df['subcontig_total']
 	rpkm_recruit_df.sort_values(by='percent_recruited', ascending=False, inplace=True)
 	# Only pass contigs that have the magjority of subcontigs recruited (>= 51%)
-	rpkm_recruit_filter_df = rpkm_recruit_df.loc[rpkm_recruit_df['percent_recruited'] >= 0.51]
+	rpkm_recruit_filter_df = rpkm_recruit_df.loc[rpkm_recruit_df['percent_recruited'] >= rpkm_per_pass]
 	
 	mg_contig_per_max_df = rpkm_recruit_filter_df.groupby(['contig_id'])[
 											'percent_recruited'].max().reset_index()
@@ -633,8 +636,8 @@ def main():
 	mg_recruit_df['percent_recruited'] = mg_recruit_df['subcontig_recruits'] / \
 											mg_recruit_df['subcontig_total']
 	mg_recruit_df.sort_values(by='percent_recruited', ascending=False, inplace=True)
-	# Only pass contigs that have the magjority of subcontigs recruited (>= 51%)
-	mg_recruit_filter_df = mg_recruit_df.loc[mg_recruit_df['percent_recruited'] >= 0.51]	
+	# Only pass contigs that have the magjority of subcontigs recruited (>= N%)
+	mg_recruit_filter_df = mg_recruit_df.loc[mg_recruit_df['percent_recruited'] >= gmm_per_pass]	
 	mg_contig_per_max_df = mg_recruit_filter_df.groupby(['contig_id'])[
 											'percent_recruited'].max().reset_index()
 	mg_contig_per_max_df.columns = ['contig_id', 'percent_max']
