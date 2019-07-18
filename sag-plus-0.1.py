@@ -150,8 +150,8 @@ def main():
 
 
 	# for testing
-	msag_chunk = 10 # i.e. 2 = 50% , 5 = 20%, 10 = 10%, ...
-	save_path = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/51_51/' + str(msag_chunk) + '/'
+	msag_chunk = 5 # i.e. 2 = 50% , 5 = 20%, 10 = 10%, ...
+	save_path = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + str(msag_chunk) + '/'
 	
 	###############
 	mocksag_path = join(save_path, 'mockSAGs')
