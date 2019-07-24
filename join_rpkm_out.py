@@ -1,10 +1,9 @@
 import pandas as pd
 from functools import reduce
+import sys
 
-
-csv_list = ['RH_S001__insert_270.rpkm.csv', 'RH_S002__insert_270.rpkm.csv',
-			'RH_S003__insert_270.rpkm.csv', 'RH_S004__insert_270.rpkm.csv',
-			'RH_S005__insert_270.rpkm.csv']
+csv_list = sys.argv[1].split(',')
+output_name = sys.argv[2]
 
 rpkm_df_list = []
 for csv in csv_list:
@@ -16,7 +15,5 @@ for csv in csv_list:
 
 merged_df = reduce(lambda  left,right: pd.merge(left,right,on=['Sequence_name'],
                                             how='outer'), rpkm_df_list)
-merged_df.to_csv('CAMI_high_GoldStandardAssembly.rpkm.tsv', sep='\t',
-					header=True, index=True
-					)
+merged_df.to_csv(output_name, sep='\t',	header=True, index=True)
 

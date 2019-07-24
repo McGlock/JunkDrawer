@@ -139,9 +139,10 @@ def mock_SAG(fasta_file, chunk_num):
 
 def main():
 
-	sag_path = '/home/rmclaughlin/Ryan/CAMI_I_HIGH/source_genomes/1021_AC_run134.final.scaffolds.gt1kb.fasta'
-	mg_file = '/home/rmclaughlin/Ryan/CAMI_I_HIGH/CAMI_high_GoldStandardAssembly.fasta'
-	mg_rpkm_file = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/RPKMs/CAMI_high_GoldStandardAssembly.rpkm.tsv'
+	sag_path = sys.argv[1]
+	mg_file = sys.argv[2]
+	mg_raw_file_list = sys.argv[3]
+	#mg_rpkm_file = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/RPKMs/CAMI_high_GoldStandardAssembly.rpkm.tsv'
 	max_contig_len = 10000
 	overlap_len = 2000
 	rpkm_per_pass = 0.51
@@ -150,8 +151,9 @@ def main():
 
 
 	# for testing
-	msag_chunk = 5 # i.e. 2 = 50% , 5 = 20%, 10 = 10%, ...
-	save_path = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + str(msag_chunk) + '/'
+	#msag_chunk = 5 # i.e. 2 = 50% , 5 = 20%, 10 = 10%, ...
+	#save_path = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/' + str(msag_chunk) + '/'
+	save_path = sys.argv[4]
 	
 	###############
 	mocksag_path = join(save_path, 'mockSAGs')
@@ -202,14 +204,14 @@ def main():
 		sag_list = [sag_path]
 	# TODO: subcontig function has issue with trailing kmers, needs to stop at last 10K
 	# Build Mock SAGs (for testing only), else extract all SAG contigs and headers
-	test = True # (for testing only)
+	test = False # (True for testing only)
 	print('[SAG+]: Loading/Building subcontigs for all SAGs')
 	sag_contigs_dict = {}
 	sag_subcontigs_dict = {}
 	for sag_file in sag_list:
 		sag_basename = basename(sag_file)
 		sag_id = sag_basename.rsplit('.', 1)[0]
-		if test == True: # (for testing only)
+		if test == True: # (True for testing only)
 			if isfile(join(mocksag_path, sag_id + '.mockSAG.fasta')):
 				sag_contigs = get_seqs(join(mocksag_path, sag_id + '.mockSAG.fasta'))
 			else:
@@ -218,7 +220,7 @@ def main():
 					seq_rec_list = ['\n'.join(['>'+rec[0], rec[1]]) for rec in sag_contigs]
 					mock_out.write('\n'.join(seq_rec_list))
 		else:
-			sag_contigs = get_seqs(fasta_file)
+			sag_contigs = get_seqs(sag_file)
 		sag_contigs_dict[sag_id] = sag_contigs
 
 		# Build sub sequences for each SAG contig
@@ -342,8 +344,74 @@ def main():
 	# TODO: OR impliment Salmon TPM calculation software?
 	print('[SAG+]: Starting Abundance Recruitment Algorithm')
 
-	print('[SAG+]: Loading RPKM values for %s' % mg_id)
-	mg_rpkm_df = pd.read_csv(mg_rpkm_file, sep='\t', header=0)
+	print('[SAG+]: Checking for RPKM values table for %s' % mg_id)
+	if isfile(join(ara_path, mg_id + '.rpkm.tsv')):
+		print('[SAG+]: Loading  %s RPKM table' % mg_id)
+		mg_rpkm_df = pd.read_csv(join(ara_path, mg_id + '.rpkm.tsv'), sep='\t', header=0)
+	else:
+		print('[SAG+]: Building %s RPKM table' % mg_id)
+		# Use BWA to build an index for metagenome assembly
+		print('[SAG+]: Creating index with BWA')
+		bwa_cmd = ['/usr/local/bin/bwa', 'index',
+					join(subcontig_path, mg_id + '.subcontigs.fasta')
+					]
+		with open(join(ara_path, mg_id + '.stdout.txt'), 'w') as stdout_file:
+			with open(join(ara_path, mg_id + '.stderr.txt'), 'w') as stderr_file:
+				run_bwa = Popen(bwa_cmd, stdout=stdout_file,
+								stderr=stderr_file
+								)
+				run_bwa.communicate()
+
+		# Process raw metagenomes to calculate RPKMs
+		with open(mg_raw_file_list, 'r') as raw_fa_in:
+			raw_data = raw_fa_in.readlines()
+		rpkm_output_list = []
+		for line in raw_data:
+			split_line = line.strip('\n').split('\t')
+			pe1 = split_line[0]
+			pe2	= split_line[1]
+			pe_basename = basename(pe1)
+			pe_id = pe_basename.split('.')[0]
+			print('[SAG+]: Running BWA mem on %s' % pe_id)
+			mem_cmd = ['/usr/local/bin/bwa', 'mem', '-t', '2',
+						join(subcontig_path, mg_id + '.subcontigs.fasta'), pe1, pe2
+						]
+			with open(join(ara_path, pe_id + '.sam'), 'w') as sam_file:
+				with open(join(ara_path, pe_id + '.stderr.txt'), 'w') as stderr_file:
+					run_mem = Popen(mem_cmd, stdout=sam_file,
+									stderr=stderr_file
+									)
+					run_mem.communicate()
+
+			print('[SAG+]: Calculating RPKM for %s' % pe_id)
+			rpkm_cmd = ['/usr/local/bin/rpkm',
+							'-c', join(subcontig_path, mg_id + '.subcontigs.fasta'),
+							'-a', join(ara_path, pe_id + '.sam'),
+							'-o', join(ara_path, pe_id + '.rpkm.csv')
+							]
+			with open(join(ara_path, pe_id + '.rpkm_stdout.log'), 'w') as stdlog_file:
+				with open(join(ara_path, pe_id + '.rpkm_stderr.log'), 'w') as stderr_file:
+					run_rpkm = Popen(rpkm_cmd, stdout=stdlog_file,
+										stderr=stderr_file
+										)
+					run_rpkm.communicate()
+
+			rpkm_output_list.append(join(ara_path, pe_id + '.rpkm.csv'))
+		print('[SAG+]: Merging RPKM results for all raw data')
+		merge_cmd = ['python', 'home/rmclaughlin/bin/JunkDrawer/join_rpkm_out.py',
+						','.join(rpkm_output_list), join(ara_path, mg_id + '.rpkm.tsv')
+						]
+		with open(join(ara_path, pe_id + '.merge_stdout.log'), 'w') as stdmerge_file:
+			with open(join(ara_path, pe_id + '.merge_stderr.log'), 'w') as stderr_file:
+				run_merge = Popen(merge_cmd, stdout=stdmerge_file,
+									stderr=stderr_file
+									)
+				run_merge.communicate()
+
+		mg_rpkm_df = pd.read_csv(join(ara_path, mg_id + '.rpkm.tsv'), sep='\t', header=0)
+	sys.exit()
+
+
 	mg_rpkm_col_list = ['Sequence_name']
 	for col in mg_rpkm_df.columns:
 		if 'RPKM' in col:
@@ -650,7 +718,7 @@ def main():
 
 	# Merge MinHash and GMM Tetra (passed first by RPKM)
 	mh_gmm_merge_df = minhash_df[['sag_id', 'contig_id']].merge(
-									gmm_df[['sag_id', 'contig_id']], how='outer', # mg_max_only_df
+									mg_max_only_df[['sag_id', 'contig_id']], how='outer', # gmm_df
 									on=['sag_id', 'contig_id']
 									).drop_duplicates()
 
