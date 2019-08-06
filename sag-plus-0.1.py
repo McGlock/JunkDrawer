@@ -397,20 +397,19 @@ def main():
 					run_rpkm.communicate()
 
 			rpkm_output_list.append(join(ara_path, pe_id + '.rpkm.csv'))
+
 		print('[SAG+]: Merging RPKM results for all raw data')
-		merge_cmd = ['python', 'home/rmclaughlin/bin/JunkDrawer/join_rpkm_out.py',
+		merge_cmd = ['python', '/home/rmclaughlin/bin/JunkDrawer/join_rpkm_out.py',
 						','.join(rpkm_output_list), join(ara_path, mg_id + '.rpkm.tsv')
 						]
-		with open(join(ara_path, pe_id + '.merge_stdout.log'), 'w') as stdmerge_file:
-			with open(join(ara_path, pe_id + '.merge_stderr.log'), 'w') as stderr_file:
+		with open(join(ara_path, mg_id + '.merge_stdout.log'), 'w') as stdmerge_file:
+			with open(join(ara_path, mg_id + '.merge_stderr.log'), 'w') as stderr_file:
 				run_merge = Popen(merge_cmd, stdout=stdmerge_file,
 									stderr=stderr_file
 									)
 				run_merge.communicate()
 
 		mg_rpkm_df = pd.read_csv(join(ara_path, mg_id + '.rpkm.tsv'), sep='\t', header=0)
-	sys.exit()
-
 
 	mg_rpkm_col_list = ['Sequence_name']
 	for col in mg_rpkm_df.columns:
@@ -676,7 +675,6 @@ def main():
 				tra_out.write('\n'.join(['\t'.join(x) for x in pass_list]))
 		gmm_pass_list.extend(pass_list)
 	gmm_df = pd.DataFrame(gmm_pass_list, columns=['sag_id', 'subcontig_id', 'contig_id'])
-	sys.exit()
 	#####################################################################################
 	#####################################################################################
 	#####################################################################################
