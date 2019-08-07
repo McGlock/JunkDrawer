@@ -179,4 +179,51 @@ plt.clf()
 
 
 
+# Box plot of 51_1 checkm results
+checkm_all_path = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/51_1/checkM_stdout/ALL_checkM_stdout.tsv'
+checkm_all_df = pd.read_csv(checkm_all_path, sep='\t', header=0)
 
+sub_checkm_df = checkm_all_df[['Bin Id', 'Completeness', 'Contamination',
+								'Strain heterogeneity','data_type'
+								]].set_index(['Bin Id', 'data_type'])
+piv_sub_df = sub_checkm_df.stack().reset_index()
+piv_sub_df.columns = ['sag_id', 'data_type', 'metric', 'score']
+
+ax = sns.catplot(x="metric", y="score", hue='data_type', kind='box',
+						data=piv_sub_df, aspect=2
+						)
+plt.plot([-1, 6], [25, 25], linestyle='--', alpha=0.3, color='k')
+plt.plot([-1, 6], [50, 50], linestyle='--', alpha=0.3, color='k')
+plt.plot([-1, 6], [75, 75], linestyle='--', alpha=0.3, color='k')
+
+plt.ylim(-5, 105)
+plt.title('SAG-plus')
+ax._legend.set_title('')
+plt.savefig('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/51_1/checkM_stdout/All_checkm_boxplox.svg',
+			bbox_inches='tight'
+			)
+plt.clf()
+
+# Box plot for 51_1 true error
+true_all_path = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/51_1/trueerror_stdout/All_error_stats.tsv'
+true_all_df = pd.read_csv(true_all_path, sep='\t', header=0)
+comb_true_df = true_all_df.loc[(true_all_df['algorithm'] == 'combined') &
+								(true_all_df['level'] == 'genus') &
+								(true_all_df['statistic'] != 'F1_score')]
+sns.set_context("paper")
+# TODO: https://stackoverflow.com/questions/36220829/fine-control-over-the-font-size-in-seaborn-plots-for-academic-papers/36222162
+sns.set(font_scale=1.5) # 
+ax = sns.catplot(x="statistic", y="score", hue='data_type', kind='box',
+						data=comb_true_df, aspect=2
+						)
+plt.plot([-1, 6], [0.25, 0.25], linestyle='--', alpha=0.3, color='k')
+plt.plot([-1, 6], [0.50, 0.50], linestyle='--', alpha=0.3, color='k')
+plt.plot([-1, 6], [0.75, 0.75], linestyle='--', alpha=0.3, color='k')
+
+plt.ylim(-0.05, 1.05)
+plt.title('')
+ax._legend.set_title('')
+plt.savefig('/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/51_1/trueerror_stdout/All_trueerror_boxplox.png',
+			bbox_inches='tight'
+			)
+plt.clf()

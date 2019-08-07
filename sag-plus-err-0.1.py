@@ -69,31 +69,6 @@ err_path = files_path + '/error_analysis'
 if not path.exists(err_path):
 	makedirs(err_path)
 
-# Build error df from recruits files
-# MockSAGs
-mock_path = joinpath(files_path, 'subcontigs/')
-mock_df_list = []
-mock_file_list = [x for x in os.listdir(mock_path) 
-					if ('subcontigs.fasta' in x) &
-					('CAMI_high_GoldStandardAssembly' not in x)
-					]
-print('loading mocksag files')
-mock_data_list = []
-for mock_file in mock_file_list:
-	file_path = os.path.join(mock_path, mock_file)
-	with open(file_path, 'r') as fasta_in:
-		data = fasta_in.readlines()
-	for line in data:
-		if '>' in line:
-			sag_id = mock_file.split('.subcontigs.fasta')[0]
-			subcontig_id = line.lstrip('>').rstrip('\n')
-			contig_id = subcontig_id.rsplit('_', 1)[0]
-			mock_data_list.append([sag_id, subcontig_id, contig_id])
-
-mock_concat_df = pd.DataFrame(mock_data_list, columns=['sag_id', 'subcontig_id',
-														'contig_id']
-														)
-
 # MinHash
 mh_path = joinpath(files_path, 'minhash_recruits/')
 mh_df_list = []
@@ -147,17 +122,15 @@ final_df = pd.read_csv(final_file, sep='\t', header=0, index_col=0,
 							)
 final_df['subcontig_id'] = None
 
-mock_concat_df['algorithm'] = 'MockSAG'
 mh_concat_df['algorithm'] = 'MinHash'
 rpkm_concat_df['algorithm'] = 'RPKM'
 tetra_concat_df['algorithm'] = 'tetra_GMM'
 final_df['algorithm'] = 'combined'
-final_concat_df = pd.concat([mock_concat_df, mh_concat_df, rpkm_concat_df,
+final_concat_df = pd.concat([mh_concat_df, rpkm_concat_df,
 							tetra_concat_df, final_df
 							])
 final_group_df = final_concat_df.groupby(['sag_id', 'algorithm', 'contig_id'])[
 											'subcontig_id'].count().reset_index()
-print(mock_concat_df.head())
 print(mh_concat_df.head())
 print(rpkm_concat_df.head())
 print(tetra_concat_df.head())
@@ -171,7 +144,7 @@ sag_cnt_dict = final_tax_df.groupby('sag_id')['sag_id'].count().to_dict()
 #final_tax_df['contig_count'] = [sag_cnt_dict[x] for x in final_tax_df['sag_id']]
 #final_tax_df.sort_values('contig_count', ascending=True, inplace=True)
 error_list = []
-algo_list = ['MockSAG', 'MinHash', 'RPKM', 'tetra_GMM', 'combined']
+algo_list = ['MinHash', 'RPKM', 'tetra_GMM', 'combined']
 level_list = ['genus', 'species', 'strain', 'CAMI_genomeID']
 for i, sag_id in enumerate(list(final_df['sag_id'].unique())):
 	sag_key_list = [str(s) for s in set(tax_mg_df['CAMI_genomeID']) if str(s) in sag_id]
