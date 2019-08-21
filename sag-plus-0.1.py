@@ -632,20 +632,24 @@ def main():
 							).fit(sag_umap_df.values, sag_umap_df.index
 							)
 			print('[SAG+]: GMM Converged: ', gmm.converged_)
-			
-			sag_scores = gmm.score_samples(sag_umap_df.values)
-			sag_scores_df = pd.DataFrame(data=sag_scores, index=sag_targets)
-			sag_score_min = min(sag_scores_df.values)[0]
-			sag_score_max = max(sag_scores_df.values)[0]
-			mg_scores = gmm.score_samples(mg_umap_df.values)
-			mg_scores_df = pd.DataFrame(data=mg_scores, index=mg_targets)
+			try:
+				sag_scores = gmm.score_samples(sag_umap_df.values)
+				sag_scores_df = pd.DataFrame(data=sag_scores, index=sag_targets)
+				sag_score_min = min(sag_scores_df.values)[0]
+				sag_score_max = max(sag_scores_df.values)[0]
+				mg_scores = gmm.score_samples(mg_umap_df.values)
+				mg_scores_df = pd.DataFrame(data=mg_scores, index=mg_targets)
 
-			gmm_pass_df = mg_scores_df.loc[(mg_scores_df[0] >= sag_score_min) &
-											(mg_scores_df[0] <= sag_score_max)
-											]
-			pass_list = []
-			for md_nm in gmm_pass_df.index.values:
-				pass_list.append([sag_id, md_nm, md_nm.rsplit('_', 1)[0]])
+				gmm_pass_df = mg_scores_df.loc[(mg_scores_df[0] >= sag_score_min) &
+												(mg_scores_df[0] <= sag_score_max)
+												]
+				pass_list = []
+				for md_nm in gmm_pass_df.index.values:
+					pass_list.append([sag_id, md_nm, md_nm.rsplit('_', 1)[0]])
+			except:
+				print('[SAG+]: Warning: No recruits found...')
+				pass_list = []
+
 			
 			'''
 			##################################
@@ -759,9 +763,13 @@ def main():
 			final_out.write('\n'.join(final_mgsubs_list))
 		# Combine SAG and final recruits
 		with open(join(ext_path, sag_id + '.extend_SAG.fasta'), 'w') as cat_file:
-			data = []			
-			with open(join(mocksag_path, sag_id + '.mockSAG.fasta'), 'r') as sag_in:
-				data.extend(sag_in.readlines())
+			data = []
+			if test == True:
+				with open(join(mocksag_path, sag_id + '.mockSAG.fasta'), 'r') as sag_in:
+					data.extend(sag_in.readlines())
+			else:
+				with open(sag_file, 'r') as sag_in:
+					data.extend(sag_in.readlines())
 			with open(join(final_path, sag_id + '.final_recruits.fasta'), 'r') as \
 				recruits_in:
 				data.extend(recruits_in.readlines())
