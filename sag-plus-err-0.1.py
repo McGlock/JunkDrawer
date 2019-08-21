@@ -69,6 +69,12 @@ err_path = files_path + '/error_analysis'
 if not path.exists(err_path):
 	makedirs(err_path)
 
+print(tax_mg_df.head())
+
+sys.exit()
+
+
+
 # MinHash
 mh_path = joinpath(files_path, 'minhash_recruits/')
 mh_df_list = []

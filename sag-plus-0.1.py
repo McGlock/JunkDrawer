@@ -785,7 +785,11 @@ def main():
 		merge_config = join(asm_sag_path, sag_id + '_merge_config')
 		with open(merge_config, 'w') as merge_out:
 			count = '2'
-			mockSAG_path = join(mocksag_path, sag_id + '.mockSAG.fasta')
+			if test == True:
+				mockSAG_path = join(mocksag_path, sag_id + '.mockSAG.fasta')
+			else:
+				mockSAG_path = sag_file
+
 			final_recruits_path = join(final_path, sag_id + '.final_recruits.fasta')
 			min_len = '100'
 			master_file = join(asm_sag_path, sag_id + '.merged.ctg.fasta')
@@ -837,12 +841,20 @@ def main():
 		
 		# Use SPAdes to co-assemble mSAG and recruits
 		print('[SAG+]: Re-assembling SAG with final recruits using SPAdes')
-		spades_cmd = ['/home/rmclaughlin/bin/SPAdes-3.13.0-Linux/bin/spades.py',
-						'--sc', '-k', '21,33,55,77,99,127', '--careful', '--only-assembler',
-						'-o', join(asm_path, sag_id), '--trusted-contigs',
-						join(mocksag_path, sag_id + '.mockSAG.fasta'),
-						'--s1', join(final_path, sag_id + '.final_recruits.fasta')
-						]
+		if test == True:
+			spades_cmd = ['/home/rmclaughlin/bin/SPAdes-3.13.0-Linux/bin/spades.py',
+							'--sc', '-k', '21,33,55,77,99,127', '--careful', '--only-assembler',
+							'-o', join(asm_path, sag_id), '--trusted-contigs',
+							join(mocksag_path, sag_id + '.mockSAG.fasta'),
+							'--s1', join(final_path, sag_id + '.final_recruits.fasta')
+							]
+		else:
+			spades_cmd = ['/home/rmclaughlin/bin/SPAdes-3.13.0-Linux/bin/spades.py',
+							'--sc', '-k', '21,33,55,77,99,127', '--careful', '--only-assembler',
+							'-o', join(asm_path, sag_id), '--trusted-contigs',
+							sag_file,
+							'--s1', join(final_path, sag_id + '.final_recruits.fasta')
+							]
 		run_spades = Popen(spades_cmd, stdout=PIPE)
 		print(run_spades.communicate()[0].decode())
 		move_cmd = ['mv', join(join(asm_path, sag_id),'scaffolds.fasta'),
