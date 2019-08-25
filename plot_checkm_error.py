@@ -4,10 +4,132 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy import stats
-
+import sys
 
 def r2(x, y):
     return stats.pearsonr(x, y)[0] ** 2
+
+
+# Build KDE of mockSAG and SAG+ CheckM output
+
+# load checkm results
+work_dir = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/51_1/10/'
+cm_sp_path = work_dir + 'checkM/checkM_stdout.tsv'
+cm_ms_path = work_dir + 'mockSAGs/checkM_stdout.tsv'
+cm_sp_df = pd.read_csv(cm_sp_path, sep='\t', header=0)
+cm_ms_df = pd.read_csv(cm_ms_path, sep='\t', header=0)
+# extract sag ID from bin id
+cm_ms_df['sag_id'] = [x.rsplit('.', 1)[0] for x in cm_ms_df['Bin Id']]
+cm_sp_df['sag_id'] = [x.rsplit('.', 1)[0] for x in cm_sp_df['Bin Id']]
+# add datatype col
+cm_ms_df['datatype'] = 'mockSAG'
+cm_sp_df['datatype'] = 'MAG+'
+
+cat_df = pd.concat([cm_ms_df, cm_sp_df])
+
+sns.set_context("paper")
+sns.set(font_scale=1.5)
+ax = sns.kdeplot(cm_ms_df['Completeness'].dropna(), color='blue', label='mockSAG',
+					bw=5, shade=True#, legend=False
+					)
+ax = sns.kdeplot(cm_sp_df['Completeness'].dropna(), color='orange', label='MAG+',
+					bw=5, shade=True#, legend=False
+					)
+ax.set(xlabel='Completeness', ylabel='')
+plt.savefig(work_dir + 'error_analysis/' + 'Completeness_kde.png',bbox_inches='tight')
+plt.clf()
+
+sns.set_context("paper")
+sns.set(font_scale=1.5)
+ax = sns.kdeplot(cm_ms_df['Contamination'].dropna(), color='blue', label='mockSAG',
+					bw=5, shade=True#, legend=False
+					)
+ax = sns.kdeplot(cm_sp_df['Contamination'].dropna(), color='orange', label='MAG+',
+					bw=5, shade=True#, legend=False
+					)
+ax.set(xlabel='Contamination', ylabel='')
+plt.savefig(work_dir + 'error_analysis/' + 'Contamination_kde.png',	bbox_inches='tight')
+plt.clf()
+
+# Build KDE of mockSAG and SAG+ Actual Error output
+
+err_stats_path = work_dir + 'error_analysis/All_stats_count.tsv'
+err_df = pd.read_csv(err_stats_path, sep='\t', header=0)
+
+# reshape sag+ err output df
+err_df = pd.read_csv(err_stats_path, sep='\t', header=0)
+algorithm_list = list(set(err_df['algorithm']))
+level_list = list(set(err_df['level']))
+df_list = []
+for algorithm in algorithm_list:
+	algorithm_df = err_df.loc[err_df['algorithm'] == algorithm]
+	for level in level_list:
+		level_df = algorithm_df.loc[algorithm_df['level'] == level]
+		pivot_df = level_df[['sag_id', 'statistic', 'score']
+							].pivot(index='sag_id', columns='statistic', values='score'
+								).reset_index()
+		pivot_df['algorithm'] = algorithm
+		pivot_df['level'] = level
+		df_list.append(pivot_df)
+concat_df = pd.concat(df_list)
+
+mock_err_df = concat_df.loc[(concat_df['algorithm'] == 'mockSAG') &
+							(concat_df['level'] == 'species')
+							]
+comb_err_df = concat_df.loc[(concat_df['algorithm'] == 'combined') &
+							(concat_df['level'] == 'species')
+							]
+concat_df.to_csv(work_dir + 'error_analysis/reshaped_errstats.tsv',
+					index=False, sep='\t')
+sns.set_context("paper")
+sns.set(font_scale=1.5)
+ax = sns.kdeplot(mock_err_df['precision'].dropna(), color='blue', label='mockSAG',
+					bw=0.1, shade=True#, legend=False
+					)
+ax = sns.kdeplot(comb_err_df['precision'].dropna(), color='orange', label='MAG+',
+					bw=0.1, shade=True#, legend=False
+					)
+ax.set(xlabel='Precision', ylabel='')
+plt.savefig(work_dir + 'error_analysis/' + 'Precision_kde.png', bbox_inches='tight')
+plt.clf()
+
+sns.set_context("paper")
+sns.set(font_scale=1.5)
+ax = sns.kdeplot(mock_err_df['sensitivity'].dropna(), color='blue', label='mockSAG',
+					bw=0.1, shade=True#, legend=False
+					)
+ax = sns.kdeplot(comb_err_df['sensitivity'].dropna(), color='orange', label='MAG+',
+					bw=0.1, shade=True#, legend=False
+					)
+ax.set(xlabel='Sensitivity', ylabel='')
+plt.savefig(work_dir + 'error_analysis/' + 'Sensitivity_kde.png', bbox_inches='tight')
+plt.clf()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+sys.exit()
+##############################
+########## OLD CODE ##########
+##############################
 
 # CheckM stdout and sag-plus-err-0.1.py output
 checkm_stdout_path = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/51_1/2/checkM/checkM_stdout.tsv'

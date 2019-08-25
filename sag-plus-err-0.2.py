@@ -129,7 +129,7 @@ for fa_file in src_mock_list:
 		f_id = fa_file.split('/')[-1].split('.mockSAG.fasta')[0]
 		f_type = 'mockSAG'
 	else:
-		f_id = fa_file.split('/')[-1].split('.fasta')[0]
+		f_id = fa_file.split('/')[-1].rsplit('.', 1)[0]
 		f_type = 'src_genome'
 	fa_file, fa_bp_cnt = cnt_total_bp(fa_file)
 	fa_bp_cnt_list.append([f_id, f_type, fa_bp_cnt])
