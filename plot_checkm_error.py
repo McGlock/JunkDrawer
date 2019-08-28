@@ -30,10 +30,10 @@ cat_df = pd.concat([cm_ms_df, cm_sp_df])
 sns.set_context("paper")
 sns.set(font_scale=1.5)
 ax = sns.kdeplot(cm_ms_df['Completeness'].dropna(), color='blue', label='mockSAG',
-					bw=5, shade=True#, legend=False
+					bw=2, shade=True#, legend=False
 					)
 ax = sns.kdeplot(cm_sp_df['Completeness'].dropna(), color='orange', label='MAG+',
-					bw=5, shade=True#, legend=False
+					bw=2, shade=True#, legend=False
 					)
 ax.set(xlabel='Completeness', ylabel='')
 plt.savefig(work_dir + 'error_analysis/' + 'Completeness_kde.png',bbox_inches='tight')
@@ -42,10 +42,10 @@ plt.clf()
 sns.set_context("paper")
 sns.set(font_scale=1.5)
 ax = sns.kdeplot(cm_ms_df['Contamination'].dropna(), color='blue', label='mockSAG',
-					bw=5, shade=True#, legend=False
+					bw=2, shade=True#, legend=False
 					)
 ax = sns.kdeplot(cm_sp_df['Contamination'].dropna(), color='orange', label='MAG+',
-					bw=5, shade=True#, legend=False
+					bw=2, shade=True#, legend=False
 					)
 ax.set(xlabel='Contamination', ylabel='')
 plt.savefig(work_dir + 'error_analysis/' + 'Contamination_kde.png',	bbox_inches='tight')
@@ -73,21 +73,30 @@ for algorithm in algorithm_list:
 		df_list.append(pivot_df)
 concat_df = pd.concat(df_list)
 
+
+MQ_df = concat_df.loc[(concat_df['precision'] >= 0.9) & (concat_df['sensitivity'] >= 0.5)]
+MQ_comb_err_df = MQ_df.loc[(MQ_df['algorithm'] == 'combined') &
+							(MQ_df['level'] == 'species')
+							]
+print(MQ_comb_err_df.shape)
+
+
 mock_err_df = concat_df.loc[(concat_df['algorithm'] == 'mockSAG') &
 							(concat_df['level'] == 'species')
 							]
 comb_err_df = concat_df.loc[(concat_df['algorithm'] == 'combined') &
 							(concat_df['level'] == 'species')
 							]
+print(comb_err_df.shape)
 concat_df.to_csv(work_dir + 'error_analysis/reshaped_errstats.tsv',
 					index=False, sep='\t')
 sns.set_context("paper")
 sns.set(font_scale=1.5)
 ax = sns.kdeplot(mock_err_df['precision'].dropna(), color='blue', label='mockSAG',
-					bw=0.1, shade=True#, legend=False
+					bw=0.025, shade=True#, legend=False
 					)
 ax = sns.kdeplot(comb_err_df['precision'].dropna(), color='orange', label='MAG+',
-					bw=0.1, shade=True#, legend=False
+					bw=0.025, shade=True#, legend=False
 					)
 ax.set(xlabel='Precision', ylabel='')
 plt.savefig(work_dir + 'error_analysis/' + 'Precision_kde.png', bbox_inches='tight')
@@ -96,10 +105,10 @@ plt.clf()
 sns.set_context("paper")
 sns.set(font_scale=1.5)
 ax = sns.kdeplot(mock_err_df['sensitivity'].dropna(), color='blue', label='mockSAG',
-					bw=0.1, shade=True#, legend=False
+					bw=0.025, shade=True#, legend=False
 					)
 ax = sns.kdeplot(comb_err_df['sensitivity'].dropna(), color='orange', label='MAG+',
-					bw=0.1, shade=True#, legend=False
+					bw=0.025, shade=True#, legend=False
 					)
 ax.set(xlabel='Sensitivity', ylabel='')
 plt.savefig(work_dir + 'error_analysis/' + 'Sensitivity_kde.png', bbox_inches='tight')
