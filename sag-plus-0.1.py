@@ -223,6 +223,7 @@ def main():
 			sag_contigs = get_seqs(sag_file)
 		sag_contigs_dict[sag_id] = sag_contigs
 
+
 		# Build sub sequences for each SAG contig
 		if isfile(join(subcontig_path, sag_id + '.subcontigs.fasta')):
 			sag_headers, sag_subs = zip(*get_seqs(
@@ -915,7 +916,7 @@ def main():
 					]
 	run_checkm = Popen(checkm_cmd, stdout=PIPE)
 	print(run_checkm.communicate()[0].decode())
-		
+	
 if __name__ == "__main__":
 	main()
 

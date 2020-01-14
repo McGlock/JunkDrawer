@@ -10,9 +10,9 @@ import sys
 working_dir = '/home/rmclaughlin/Ryan/Lulu/BinMulti/BM_190826/'
 checkm_file = working_dir + 'MetaBAT2_BM_out_min1500_checkM_stdout_ALL.tsv'
 checkm_df = pd.read_csv(checkm_file, sep='\t', header=0)
-rpkm_file = working_dir + 'BM_out_binned.rpkm-1.csv'
+rpkm_file = working_dir + 'BM_out_binned_ALL.rpkm.csv'
 rpkm_df = pd.read_csv(rpkm_file, sep=',', header=0)
-gtdb_file = working_dir + 'GTDB-tk.tsv'
+gtdb_file = working_dir + 'GTDB-tk_summary_ALL.tsv'
 gtdb_df = pd.read_csv(gtdb_file, sep='\t', header=0)
 
 rpkm_df['bin'] = [x[1] + '.' + x[0].split('_')[2] if '_' in x[0]
@@ -316,7 +316,7 @@ plt.ylim(-0.5, 11)
 plt.savefig(working_dir + 'Lulu_Comp_Cont_LC_alt.svg', bbox_inches = 'tight')
 plt.clf()
 
-
+'''
 # Build scatter for Low Contamination only (Brandon's coloring scheme)
 LC_df = merge_df[(merge_df['Contamination'] <= 10)]
 alt_col_dict = {x[0]:x[1] for x in zip(LC_df['Configuration'], LC_df['Config_color'])}
@@ -350,3 +350,4 @@ plt.xlim(-5, 105)
 plt.ylim(-0.5, 11)
 plt.savefig(working_dir + 'Lulu_Comp_Cont_LC_BK.svg', bbox_inches = 'tight')
 plt.clf()
+'''

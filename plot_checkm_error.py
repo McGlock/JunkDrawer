@@ -13,7 +13,7 @@ def r2(x, y):
 # Build KDE of mockSAG and SAG+ CheckM output
 
 # load checkm results
-work_dir = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/51_1/10/'
+work_dir = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/sag_redux/51_51/10/'
 cm_sp_path = work_dir + 'checkM/checkM_stdout.tsv'
 cm_ms_path = work_dir + 'mockSAGs/checkM_stdout.tsv'
 cm_sp_df = pd.read_csv(cm_sp_path, sep='\t', header=0)
@@ -30,25 +30,25 @@ cat_df = pd.concat([cm_ms_df, cm_sp_df])
 sns.set_context("paper")
 sns.set(font_scale=1.5)
 ax = sns.kdeplot(cm_ms_df['Completeness'].dropna(), color='blue', label='mockSAG',
-					bw=2, shade=True#, legend=False
+					bw=2, shade=True, legend=False
 					)
 ax = sns.kdeplot(cm_sp_df['Completeness'].dropna(), color='orange', label='MAG+',
-					bw=2, shade=True#, legend=False
+					bw=2, shade=True, legend=False
 					)
 ax.set(xlabel='Completeness', ylabel='')
-plt.savefig(work_dir + 'error_analysis/' + 'Completeness_kde.png',bbox_inches='tight')
+plt.savefig(work_dir + 'error_analysis/' + 'Completeness_kde.pdf',bbox_inches='tight')
 plt.clf()
 
 sns.set_context("paper")
 sns.set(font_scale=1.5)
 ax = sns.kdeplot(cm_ms_df['Contamination'].dropna(), color='blue', label='mockSAG',
-					bw=2, shade=True#, legend=False
+					bw=2, shade=True, legend=False
 					)
 ax = sns.kdeplot(cm_sp_df['Contamination'].dropna(), color='orange', label='MAG+',
-					bw=2, shade=True#, legend=False
+					bw=2, shade=True, legend=False
 					)
 ax.set(xlabel='Contamination', ylabel='')
-plt.savefig(work_dir + 'error_analysis/' + 'Contamination_kde.png',	bbox_inches='tight')
+plt.savefig(work_dir + 'error_analysis/' + 'Contamination_kde.pdf',	bbox_inches='tight')
 plt.clf()
 
 # Build KDE of mockSAG and SAG+ Actual Error output
@@ -93,26 +93,142 @@ concat_df.to_csv(work_dir + 'error_analysis/reshaped_errstats.tsv',
 sns.set_context("paper")
 sns.set(font_scale=1.5)
 ax = sns.kdeplot(mock_err_df['precision'].dropna(), color='blue', label='mockSAG',
-					bw=0.025, shade=True#, legend=False
+					bw=0.025, shade=True, legend=False
 					)
 ax = sns.kdeplot(comb_err_df['precision'].dropna(), color='orange', label='MAG+',
-					bw=0.025, shade=True#, legend=False
+					bw=0.025, shade=True, legend=False
 					)
 ax.set(xlabel='Precision', ylabel='')
-plt.savefig(work_dir + 'error_analysis/' + 'Precision_kde.png', bbox_inches='tight')
+plt.savefig(work_dir + 'error_analysis/' + 'Precision_kde.pdf', bbox_inches='tight')
 plt.clf()
 
 sns.set_context("paper")
 sns.set(font_scale=1.5)
 ax = sns.kdeplot(mock_err_df['sensitivity'].dropna(), color='blue', label='mockSAG',
-					bw=0.025, shade=True#, legend=False
+					bw=0.025, shade=True, legend=False
 					)
 ax = sns.kdeplot(comb_err_df['sensitivity'].dropna(), color='orange', label='MAG+',
-					bw=0.025, shade=True#, legend=False
+					bw=0.025, shade=True, legend=False
 					)
 ax.set(xlabel='Sensitivity', ylabel='')
-plt.savefig(work_dir + 'error_analysis/' + 'Sensitivity_kde.png', bbox_inches='tight')
+plt.savefig(work_dir + 'error_analysis/' + 'Sensitivity_kde.pdf', bbox_inches='tight')
 plt.clf()
+
+
+# Build scatter for Low Contamination only (alternative coloring scheme)
+LC_df = comb_err_df.copy() #comb_err_df[(comb_err_df['precision'] >= 0.9)]
+alt_col_dict = {'High': 'orange', 'Medium': 'blue', 'Partial': 'gray', 'Low': 'white'}
+alt_col_list = []
+for i, row in LC_df.iterrows():
+	prec = row['precision']
+	sens = row['sensitivity']
+	if (prec >= 0.95) & (sens >= 0.9):
+		alt_col_list.append('High')
+	elif ((prec >= 0.9) & (sens >= 0.5)) or ((prec >= 0.95) & (sens >= 0.9)):
+		alt_col_list.append('Medium')
+	elif (prec >= 0.95) & (sens < 0.5):
+		alt_col_list.append('Partial')
+	else:
+		alt_col_list.append('Low')
+LC_df['MAG Quality'] = alt_col_list
+qual2col_list = []
+for q, v in alt_col_dict.items():
+	count = list(LC_df['MAG Quality']).count(q)
+	print(q, count)
+	lab = q + ' (n=' + str(count) + ')'
+	qual2col_list.append([lab, v])
+
+sns.set_style("white")
+sns.set_style("ticks")
+sns.set_context("notebook")
+ax = sns.scatterplot(x='precision', y='sensitivity', hue='MAG Quality',
+						edgecolor='gray', data=LC_df, palette=alt_col_dict, alpha=0.75)
+leg_markers = []
+for t, p in qual2col_list:
+	s = plt.scatter([-10], [0], marker='o',label=t, color=p, edgecolor='gray')
+	leg_markers.append(s)
+
+leg = plt.legend(title='MAG+ Quality', handles=leg_markers, bbox_to_anchor=(1.4, 1), loc=1,
+					borderaxespad=0., scatterpoints=1, fontsize=10, labelspacing=1.25,
+					borderpad=1
+					)
+for i, tm in enumerate(leg_markers):
+	leg.legendHandles[i]._sizes = [75]
+plt.gca().add_artist(leg)
+
+plt.xlim(0, 1.02)
+plt.ylim(0, 1.02)
+plt.savefig(work_dir + 'error_analysis/SPlus_Comp_Cont_LC_alt.pdf', bbox_inches = 'tight')
+plt.clf()
+
+
+# Build scatter for Low Contamination only (alternative coloring scheme)
+# This one has before and after TIGRfams as axis be keeps the quality colors
+tigr_path = work_dir + 'TIGRfams/mockSAG_TIGRfam_All.csv'
+tigr_df = pd.read_csv(tigr_path, sep=',', header=0)
+
+#tigr_df = pd.read_csv(tigr_path, sep=',', header=0, index_col=0).stack().reset_index()
+#tigr_df.columns = ['sag_id', 'state', 'count']
+
+LC_df = comb_err_df.copy()
+LC_tigr_df = tigr_df.merge(LC_df, on='sag_id', how='left')
+alt_col_dict = {'High': 'orange', 'Medium': 'blue', 'Partial': 'gray'} #, 'Low': 'white'}
+alt_col_list = []
+for i, row in LC_tigr_df.iterrows():
+	prec = row['precision']
+	sens = row['sensitivity']
+	if (prec >= 0.95) & (sens >= 0.9):
+		alt_col_list.append('High')
+	elif ((prec >= 0.9) & (sens >= 0.5)) or ((prec >= 0.95) & (sens >= 0.9)):
+		alt_col_list.append('Medium')
+	elif (prec >= 0.95) & (sens < 0.5):
+		alt_col_list.append('Partial')
+	else:
+		alt_col_list.append('Low')
+LC_tigr_df['MAG Quality'] = alt_col_list
+LC_tigr_df = LC_tigr_df.loc[LC_tigr_df['MAG Quality'] != 'Low']
+
+qual2col_list = []
+for q, v in alt_col_dict.items():
+	count = list(LC_tigr_df['MAG Quality']).count(q)
+	print(q, count)
+	lab = q + ' (n=' + str(count) + ')'
+	qual2col_list.append([lab, v])
+
+sns.set_style("white")
+sns.set_style("ticks")
+sns.set_context("notebook")
+ax = sns.regplot(x='F1_score', y='before', data=LC_tigr_df, color='black', scatter=False, ci=None,
+				truncate=True
+				)
+ax = sns.regplot(x='F1_score', y='after', data=LC_tigr_df, color='black', scatter=False, ci=None,
+				truncate=True
+				)
+ax = sns.scatterplot(x='F1_score', y='before',
+						edgecolor='black', data=LC_tigr_df, color='white', size=4, marker='D')
+
+ax = sns.scatterplot(x='F1_score', y='after', hue='MAG Quality',
+						edgecolor='gray', data=LC_tigr_df, palette=alt_col_dict, alpha=1.0)
+leg_markers = []
+for t, p in qual2col_list:
+	s = plt.scatter([-10], [0], marker='o',label=t, color=p, edgecolor='gray')
+	leg_markers.append(s)
+
+leg = plt.legend(title='Final Population\nGenome Quality', handles=leg_markers, bbox_to_anchor=(1.4, 1), loc=1,
+					borderaxespad=0., scatterpoints=1, fontsize=10, labelspacing=1.25,
+					borderpad=1
+					)
+for i, tm in enumerate(leg_markers):
+	leg.legendHandles[i]._sizes = [75]
+plt.gca().add_artist(leg)
+
+plt.xlim(0, 1.03)
+plt.ylim(-100, 3000)
+ax.set(xlabel='F1 Score', ylabel='Unique TIGRfams')
+
+plt.savefig(work_dir + 'error_analysis/SPlus_TIGRfams_LC_alt.pdf', bbox_inches = 'tight')
+plt.clf()
+
 
 
 

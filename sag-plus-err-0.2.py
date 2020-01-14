@@ -71,7 +71,7 @@ def cnt_contig_bp(fasta_file):
 
 	return fa_cnt_dict
 
-
+#'''
 # Map genome id and contig id to taxid for error analysis
 sag_tax_map = '/home/rmclaughlin/Ryan/SAG-plus/CAMI_I_HIGH/genome_taxa_info.tsv'
 sag_taxmap_df = pd.read_csv(sag_tax_map, sep='\t', header=0)
@@ -101,11 +101,12 @@ tax_mg_df = taxpath_df.merge(mg_contig_map_df, left_on='CAMI_genomeID', right_on
 tax_mg_df = tax_mg_df[['@@SEQUENCEID', 'CAMI_genomeID', 'domain', 'phylum', 'class', 'order',
 						'family', 'genus', 'species', 'strain'
 						]]
+#'''
 files_path = sys.argv[1]
 err_path = files_path + '/error_analysis'
 if not path.exists(err_path):
 	makedirs(err_path)
-
+#'''
 # count all bp's for Source genomes, Source MetaG, MockSAGs
 src_metag_file = '/home/rmclaughlin/Ryan/CAMI_I_HIGH/CAMI_high_GoldStandardAssembly.fasta'
 src_genome_path = '/home/rmclaughlin/Ryan/CAMI_I_HIGH/source_genomes/'
@@ -216,7 +217,7 @@ tetra_concat_df = pd.concat(tetra_df_list)
 # Final Recruits
 final_file = joinpath(files_path, 'final_recruits/final_recruits.tsv')
 print('loading combined files')
-final_df = pd.read_csv(final_file, sep='\t', header=0, index_col=0,
+final_df = pd.read_csv(final_file, sep='\t', header=0,# index_col=0,
 							names=['sag_id', 'contig_id']
 							)
 final_df['subcontig_id'] = None
@@ -231,9 +232,14 @@ final_concat_df = pd.concat([mh_concat_df, rpkm_concat_df,
 final_group_df = final_concat_df.groupby(['sag_id', 'algorithm', 'contig_id'])[
 											'subcontig_id'].count().reset_index()
 print(mh_concat_df.head())
+print(mh_concat_df.shape)
 print(rpkm_concat_df.head())
+print(rpkm_concat_df.shape)
 print(tetra_concat_df.head())
+print(tetra_concat_df.shape)
 print(final_df.head())
+print(final_df.shape)
+
 
 print('merging all')
 final_tax_df = final_group_df.merge(tax_mg_df, left_on='contig_id', right_on='@@SEQUENCEID',
@@ -289,28 +295,29 @@ mg_err_df = pd.DataFrame(error_list, columns=['sag_id', 'algorithm', 'level',
 													'FalseNeg', 'TrueNeg'
 													])
 final_err_df = pd.concat([src_mock_err_df, mg_err_df])
-
 final_err_df.to_csv(err_path + '/All_error_count.tsv', index=False, sep='\t')
-
+#'''
+#final_err_df = pd.read_csv(err_path + '/All_error_count.tsv', header=0, sep='\t')
 calc_stats_df = calc_err(final_err_df)
 stat_list = ['precision', 'sensitivity', 'F1_score']
 calc_stats_df = calc_stats_df.loc[calc_stats_df['statistic'].isin(stat_list)]
 calc_stats_df.to_csv(err_path + '/All_stats_count.tsv', index=False, sep='\t')
+
 for level in set(calc_stats_df['level']):
 	level_df = calc_stats_df.loc[calc_stats_df['level'] == level]
 	sns.set_context("paper")
 	ax = sns.catplot(x="statistic", y="score", hue='algorithm', kind='box',
-						data=level_df, aspect=2
+						data=level_df, aspect=2, palette=sns.light_palette("black")
 						)
-
-	plt.plot([-1, 6], [0.25, 0.25], linestyle='--', alpha=0.3, color='k')
-	plt.plot([-1, 6], [0.50, 0.50], linestyle='--', alpha=0.3, color='k')
-	plt.plot([-1, 6], [0.75, 0.75], linestyle='--', alpha=0.3, color='k')
+	plt.plot([-1, 3], [0.25, 0.25], linestyle='--', alpha=0.3, color='k')
+	plt.plot([-1, 3], [0.50, 0.50], linestyle='--', alpha=0.3, color='k')
+	plt.plot([-1, 3], [0.75, 0.75], linestyle='--', alpha=0.3, color='k')
 
 	plt.ylim(0, 1)
-	plt.title('SAG-plus CAMI-1-High error analysis')
-	ax._legend.set_title('Filter Type')
-	plt.savefig(err_path + '/' + level + '_error_boxplox_count.svg',
+	plt.xlim(-0.5, 2.5)
+	#plt.title('SAG-plus CAMI-1-High error analysis')
+	ax._legend.set_title('Workflow\nStage')
+	plt.savefig(err_path + '/' + level + '_error_boxplox_count.pdf',
 				bbox_inches='tight'
 				)
 	plt.clf()
@@ -333,14 +340,14 @@ ax = sns.catplot(x="level", y="score", hue='statistic', kind='box',
 					data=concat_stat_df, aspect=2
 					)
 
-plt.plot([-1, 5], [0.25, 0.25], linestyle='--', alpha=0.3, color='k')
-plt.plot([-1, 5], [0.50, 0.50], linestyle='--', alpha=0.3, color='k')
-plt.plot([-1, 5], [0.75, 0.75], linestyle='--', alpha=0.3, color='k')
+plt.plot([-1, 3], [0.25, 0.25], linestyle='--', alpha=0.3, color='k')
+plt.plot([-1, 3], [0.50, 0.50], linestyle='--', alpha=0.3, color='k')
+plt.plot([-1, 3], [0.75, 0.75], linestyle='--', alpha=0.3, color='k')
 
 plt.ylim(0, 1)
 plt.title('SAG-plus CAMI-1-High')
 
-plt.savefig(err_path + '/multi-level_precision_boxplox_count.svg',
+plt.savefig(err_path + '/multi-level_precision_boxplox_count.pdf',
 				bbox_inches='tight'
 				)
 plt.clf()
