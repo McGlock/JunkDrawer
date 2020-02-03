@@ -1,3 +1,6 @@
+
+
+
 mate_pairs = {}
 QNAME_list = set(QNAME_list) # make the checking a tiny bit faster by making the list a set
 with open(pathToSam, 'rb') as samFile:
