@@ -7,7 +7,7 @@ from matplotlib.legend import Legend
 import sys
 
 
-working_dir = '/home/rmclaughlin/Ryan/Lulu/BinMulti/BM_190826/'
+working_dir = '/home/rmclaughlin/Ryan/Lulu/BinMulti/BM_200205/'
 checkm_file = working_dir + 'MetaBAT2_BM_out_min1500_checkM_stdout_ALL.tsv'
 checkm_df = pd.read_csv(checkm_file, sep='\t', header=0)
 rpkm_file = working_dir + 'BM_out_binned_ALL.rpkm.csv'
@@ -15,11 +15,13 @@ rpkm_df = pd.read_csv(rpkm_file, sep=',', header=0)
 gtdb_file = working_dir + 'GTDB-tk_summary_ALL.tsv'
 gtdb_df = pd.read_csv(gtdb_file, sep='\t', header=0)
 
+
+rpkm_df['Sample'] = [x.split('/')[0] for x in rpkm_df['Sample_name']]
 rpkm_df['bin'] = [x[1] + '.' + x[0].split('_')[2] if '_' in x[0]
 					else x[1] + '.' + x[0] for x in
 					zip(rpkm_df['Sequence_name'], rpkm_df['Sample'])
 					]
-rpkm_df['Sample'] = [x.split('.')[0] for x in rpkm_df['Sample']]
+print(rpkm_df.head())
 
 # Reproduce each bin for the great 8 (since they were binned as a co-asm)
 wwtp_id_list = [x for x in set(rpkm_df['Sample']) if 'wastewater' in x]
@@ -35,22 +37,33 @@ wwtp_df = pd.DataFrame(wwtp_row_list, columns=checkm_df.columns)
 #checkm_df = checkm_df.loc[checkm_df['Sample'] != 'Great8']
 #checkm_wwtp_df = pd.concat([checkm_df, wwtp_df])
 checkm_wwtp_df = checkm_df
+print
 checkm_wwtp_df['CheckM Taxonomy'] = [x.rsplit(' ', 1)[0] for x in checkm_wwtp_df['Marker lineage']]
 checkm_wwtp_df['bin'] = [x[1] + '.' + x[0].split('.')[1] for x in
 					zip(checkm_wwtp_df['Bin Id'], checkm_wwtp_df['Sample'])
 					]
+print(checkm_wwtp_df.head())
 gtdb_df['bin'] = [x[1] + '.' + x[0].split('.')[1] for x in
 					zip(gtdb_df['user_genome'], gtdb_df['Sample'])
 					]
+print(gtdb_df.head())
 
 group_rpkm_df = rpkm_df.groupby(['Sample', 'bin'])['RPKM'].sum().reset_index()
-piv_rpkm_df = group_rpkm_df.pivot(index='bin', columns='Sample', values='RPKM').reset_index()
+#piv_rpkm_df = group_rpkm_df.pivot(index='bin', columns='Sample', values='RPKM').reset_index()
+#print(piv_rpkm_df.head())
 
-
-merge_df = pd.merge(checkm_wwtp_df, piv_rpkm_df, on='bin', how='left')
-merge2_df = pd.merge(merge_df, gtdb_df, on='bin', how='left')
-merge2_df.to_csv(working_dir + 'lulu_bins_rpkms.tsv', sep='\t', header=True, index=False)
-
+merge_df = pd.merge(checkm_wwtp_df, group_rpkm_df, on='bin', how='left')
+merge_df = pd.merge(merge_df, gtdb_df, on='bin', how='left')
+merge_df.to_csv(working_dir + 'lulu_bins_rpkms.tsv', sep='\t', header=True, index=False)
+sample_AD_list = ['11A_II', '2AD43II_FD', '2AI_FD', 'AD126III_FD', 'AD148III_FD',
+					'13A_III', '2AD48II_FD', '9A_II', 'AD128I_FD', 'AD152III_FD',
+					'15A_II', '2AD52I_FD', '6A_II', 'AD132III_FD', '2AD57I_FD',
+					'7A_III', 'AD118III_FD', 'AD138III_FD', '17A_III', '2AD61I_FD',
+					'8A_II', 'AD121II_FD', 'AD143II_FD'
+					]
+merge_df['Sample'] = merge_df['Sample_x']
+merge_df = merge_df.loc[merge_df['Sample'].isin(sample_AD_list)]
+'''
 # build scatter of ALL
 col_list = ['Bin Id', 'Marker lineage', '# genomes', '# markers', '# marker sets', '0',
 				'1', '2', '3', '4', '5+', 'Completeness', 'Contamination',
@@ -60,11 +73,14 @@ col_list = ['Bin Id', 'Marker lineage', '# genomes', '# markers', '# marker sets
 ex_col_list = [x for x in merge_df.columns if x not in col_list]
 mean_rpkm_df = merge_df[ex_col_list].set_index('bin')
 mean_rpkm_list = []
+print(mean_rpkm_df.head())
 for i, row in mean_rpkm_df.iterrows():
+	print(row.sum())
+	print(row.count())
 	ave_r = row.sum()/row.count()
 	mean_rpkm_list.append(ave_r)
 merge_df['RPKM'] = mean_rpkm_list
-
+'''
 RPKM_min = merge_df['RPKM'].min()
 RPKM_max = merge_df['RPKM'].max()
 
@@ -73,6 +89,7 @@ ru_max = int(math.ceil(RPKM_max/magni))* magni
 
 tax_list = sorted(list(set(merge_df['CheckM Taxonomy'])), reverse=True)
 print(len(tax_list))
+print(tax_list)
 # custom tax order
 tax_list = ['root', 'k__Bacteria', 'k__Archaea', 'p__Proteobacteria', 'p__Firmicutes',
 			'p__Euryarchaeota', 'p__Bacteroidetes', 'p__Actinobacteria', 'c__Spirochaetia',
@@ -88,8 +105,9 @@ tax_list = ['root', 'k__Bacteria', 'k__Archaea', 'p__Proteobacteria', 'p__Firmic
 			]
 print(len(tax_list))
 print(len(merge_df['CheckM Taxonomy']))
+print("All MAGs")
 for t in tax_list:
-	count = list(checkm_wwtp_df['CheckM Taxonomy']).count(t)
+	count = list(merge_df['CheckM Taxonomy']).count(t)
 	print(t, count)
 
 palette_list = sns.color_palette("Paired", n_colors=len(tax_list))
@@ -140,13 +158,14 @@ for i, tm in enumerate(taxleg_markers):
 plt.gca().add_artist(leg)
 plt.xlim(-5, 105)
 plt.ylim(-30, 1000)
-plt.savefig(working_dir + 'Lulu_Comp_Cont_ALL.svg', bbox_inches = 'tight')
+plt.savefig(working_dir + 'Lulu_Comp_Cont_ALL.png', bbox_inches = 'tight')
 plt.clf()
 
 # Build scatter for MQ only
 MQ_df = merge_df[(merge_df['Completeness'] >= 50) &
 					(merge_df['Contamination'] <= 10)]
 
+print("MQ_HQ MAGs")
 for t in tax_list:
 	count = list(MQ_df['CheckM Taxonomy']).count(t)
 	print(t, count)
@@ -206,7 +225,7 @@ for i, tm in enumerate(taxleg_markers):
 plt.gca().add_artist(leg)
 plt.xlim(49, 101)
 plt.ylim(-0.5, 11)
-plt.savefig(working_dir + 'Lulu_Comp_Cont_MQHQ.svg', bbox_inches = 'tight')
+plt.savefig(working_dir + 'Lulu_Comp_Cont_MQHQ.png', bbox_inches = 'tight')
 plt.clf()
 
 
@@ -266,12 +285,12 @@ for i, tm in enumerate(taxleg_markers):
 plt.gca().add_artist(leg)
 plt.xlim(-5, 105)
 plt.ylim(-0.5, 11)
-plt.savefig(working_dir + 'Lulu_Comp_Cont_LC.svg', bbox_inches = 'tight')
+plt.savefig(working_dir + 'Lulu_Comp_Cont_LC.png', bbox_inches = 'tight')
 plt.clf()
 
 
 # Build scatter for Low Contamination only (alternative coloring scheme)
-LC_df = merge_df[(merge_df['Contamination'] <= 10)]
+LC_df = merge_df#[(merge_df['Contamination'] <= 10)]
 alt_col_dict = {'High': 'orange', 'Medium': 'blue', 'Partial': 'gray', 'Low': 'white'}
 alt_col_list = []
 for i, row in LC_df.iterrows():
@@ -293,6 +312,8 @@ for q, v in alt_col_dict.items():
 	lab = q + ' (n=' + str(count) + ')'
 	qual2col_list.append([lab, v])
 
+print(LC_df.head())
+LC_df.to_csv(working_dir + 'Lulu_Comp_Cont_LC.tsv', sep='\t', index=False)
 sns.set_style("white")
 sns.set_style("ticks")
 sns.set_context("notebook")
@@ -313,7 +334,7 @@ plt.gca().add_artist(leg)
 
 plt.xlim(-5, 105)
 plt.ylim(-0.5, 11)
-plt.savefig(working_dir + 'Lulu_Comp_Cont_LC_alt.svg', bbox_inches = 'tight')
+plt.savefig(working_dir + 'Lulu_Comp_Cont_LC_alt.png', bbox_inches = 'tight', dpi=300)
 plt.clf()
 
 '''
@@ -348,6 +369,6 @@ plt.gca().add_artist(leg)
 
 plt.xlim(-5, 105)
 plt.ylim(-0.5, 11)
-plt.savefig(working_dir + 'Lulu_Comp_Cont_LC_BK.svg', bbox_inches = 'tight')
+plt.savefig(working_dir + 'Lulu_Comp_Cont_LC_BK.png', bbox_inches = 'tight')
 plt.clf()
 '''

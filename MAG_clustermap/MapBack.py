@@ -1,46 +1,26 @@
 import pandas as pd
 import os
+import sys
 
-pd.set_option('display.max_columns', None)
-pd.set_option('display.max_rows', None)
 
-	rpkm_file = '/home/rmclaughlin/Ryan/Lulu/MAG_RPKMs/metaG/2AD43II_FD.metaG.rpkm.csv'
+# open mapping file for metaG to metaT
+map_file = '/home/rmclaughlin/Lulu/ProcessedData/Illumina_metagenomes/TS_output/metaG_to_metaT_mapping.tsv'
+map_df = pd.read_csv(map_file, header=0, sep='\t')
+map_dict = {x[0]:x[1] for x in zip(map_df['metaT'], map_df['metaG_asm'])}
+
+TPM_dir = '/home/rmclaughlin/Lulu/ProcessedData/PanMAGs/metaT/TPM/'
+TPM_list = os.listdir(TPM_dir)
+for TPM_sample in TPM_list:
+	print(TPM_sample)
+	# open TPM output and build DF from representatives
+	tpm_path = TPM_dir + '/' + TPM_sample + '/quant.sf'
 	rpkm_dict = {}
 	drep_dict = {}
-	with open(rpkm_file, 'r') as r_in: # Have to deal with stupid header characters
-		data = r_in.readlines()
-		for line in data[1:]:
-			line = line.strip('\n')
-			if 'UNMAPPED' not in line:
-				query_sample_id = line.split(',', 1)[0].split('/')[-1].split('.', 1)[0]
-				seq_type = line.split(',', 1)[0].split('/')[-1].split('.')[1]
-				rep_header = line.split(',', 1)[1].rsplit(',', 2)[0]
-				rep_cluster_id = line.split(',', 1)[1].rsplit(',', 2)[0].split('|', 1)[0].split('.')[0]
-				rep_sample_id = line.split(',', 1)[1].rsplit(',', 2)[0].split('|', 1)[0].split('.')[1]
-				rep_sample_id = line.split(',', 1)[1].rsplit(',', 2)[0].split('|', 1)[0].split('.')[1]
-				rep_bin_id = line.split(',', 1)[1].rsplit(',', 2)[0].split('|', 1)[0].split('.')[2]
-				rep_seq_header = line.split(',', 1)[1].rsplit(',', 2)[0].split('|', 1)[1]
-				read_cnt = line.split(',', 1)[1].rsplit(',', 2)[1]
-				rpkm_val = line.split(',', 1)[1].rsplit(',', 2)[2]
-				rpkm_dict[rep_header] = [query_sample_id, seq_type, rep_header, rep_cluster_id,
-											rep_sample_id, rep_bin_id, rep_seq_header, read_cnt,
-											rpkm_val
-											]
-				drep_dict[rep_header] = [query_sample_id, seq_type, rep_header, rep_cluster_id,
-											rep_sample_id, rep_bin_id, rep_seq_header, read_cnt,
-											rpkm_val
-											]
+	tpm_df = pd.read_csv(tpm_path, header=0, sep='\t')
+	tpm_df['rep_header'] = tpm_df['Name']
 
-	rep_rpkm_df = pd.DataFrame.from_dict(rpkm_dict, orient='index',
-											columns=['query_sample_id', 'seq_type',
-													'rep_header', 'rep_cluster_id',
-													'rep_sample_id', 'rep_bin_id',
-													'rep_seq_header', 'read_cnt',
-													'rpkm_val'
-													]).reset_index()
-	rep_rpkm_df.columns = ['drep_header' if x == 'index' else x for x in rep_rpkm_df.columns]
-
-	drep_file = '/home/rmclaughlin/Ryan/Lulu/MAG_RPKMs/cluster_reps/cluster_reps.mapped.sam'
+	# Build mapping DF from representatives to cluster members
+	drep_file = '/home/rmclaughlin/Lulu/ProcessedData/PanMAGs/cluster_reps/cluster_reps.mapped.sam'
 	drep_list = []
 	with open(drep_file, 'r') as r_in: # Have to deal with stupid header characters
 		drep_data = r_in.readlines()
@@ -48,50 +28,60 @@ pd.set_option('display.max_rows', None)
 			if (('@HD' not in dline) & ('@SQ' not in dline) & ('@PG' not in dline)):
 				drep_header = dline.split('\t')[0]
 				rep_header = dline.split('\t')[2]
-				drep_list.append([drep_header] + rpkm_dict[rep_header])
-				drep_dict[rep_header] = rpkm_dict[rep_header]
-	# Build df from parsed RPKM file
-	drep_rpkm_df = pd.DataFrame(drep_list, columns=['drep_header', 'query_sample_id', 'seq_type',
-													'rep_header', 'rep_cluster_id',
-													'rep_sample_id', 'rep_bin_id',
-													'rep_seq_header', 'read_cnt',
-													'rpkm_val'
-													])
+				drep_list.append([drep_header, rep_header])
 
+	drep_df = pd.DataFrame(drep_list, columns=['drep_header', 'rep_header'])
+	redup_df = pd.merge(drep_df, tpm_df, on='rep_header', how='left')
+	redup_df['rep_header'] = redup_df['drep_header']
+	redup_df.drop(columns=['drep_header'], inplace=True)
+	redup_df = redup_df[['Name', 'Length', 'EffectiveLength', 'TPM', 'NumReads', 'rep_header']]
+	derep_rep_df = pd.concat([tpm_df, redup_df])
+	derep_rep_df['cluster'] = [x.split('.', 1)[0] for x in derep_rep_df['rep_header']]
+	derep_rep_df['rep_header'] = [x.split('.', 1)[1] for x in derep_rep_df['rep_header']]
 
-	magmap_dir = '/home/rmclaughlin/Ryan/Lulu/MAG_RPKMs/rep2query_map/'
+	magmap_dir = '/home/rmclaughlin/Lulu/ProcessedData/PanMAGs/rep2query_map/'
 	magmap_list = os.listdir(magmap_dir)
 	magmap_files = [magmap_dir + x for x in magmap_list if '.mapped.sam' in x]
 	mag_list = []
 	for magmap_file in magmap_files:
-		print(magmap_file)
 		with open(magmap_file, 'r') as r_in: # Have to deal with stupid header characters
 			mag_data = r_in.readlines()
 			for mline in mag_data:
-				if (('@HD' not in dline) & ('@SQ' not in dline) & ('@PG' not in dline)):
-					mag_header = dline.split('\t')[0]
-					drep_header = dline.split('\t')[2]
-					mag_list.append([mag_header] + drep_dict[drep_header])
+				if (('@HD' not in mline) & ('@SQ' not in mline) & ('@PG' not in mline)):
+					mag_header = mline.split('\t')[0]
+					dmag_header = mline.split('\t')[2]
+					mag_list.append([mag_header, dmag_header])
 
-	mag_rpkm_df = pd.DataFrame(mag_list, columns=['drep_header', 'query_sample_id', 'seq_type',
-													'rep_header', 'rep_cluster_id',
-													'rep_sample_id', 'rep_bin_id',
-													'rep_seq_header', 'read_cnt',
-													'rpkm_val'
-													])
+	mag_df = pd.DataFrame(mag_list, columns=['mag_header', 'rep_header'])
+	mag_derep_df = pd.merge(mag_df, derep_rep_df, on='rep_header', how='left')
+	mag_derep_df['rep_header'] = mag_derep_df['mag_header']
+	mag_derep_df.drop(columns=['mag_header'], inplace=True)
+	mag_derep_df = mag_derep_df[['Name', 'Length', 'EffectiveLength', 'TPM', 'NumReads',
+									'rep_header', 'cluster']
+									]
 
-	# Now contains all deduped reps and reps that were removed by dedup
-	concat_rpkm_df = pd.concat([rep_rpkm_df, drep_rpkm_df, mag_rpkm_df])
+	# Concat all DF
+	concat_TPM_df = pd.concat([derep_rep_df, mag_derep_df])
+	concat_TPM_df['metaG'] = [x.split('|', 1)[0].split('.')[0] for x in
+								concat_TPM_df['rep_header']
+								]
 
-	# Trim to only values that are from the same sample from which the bin was built
-	trim_rpkm_df = concat_rpkm_df.loc[concat_rpkm_df['query_sample_id'] == 
-										concat_rpkm_df['rep_sample_id']
-										]
-	print(trim_rpkm_df.head())
-	print(trim_rpkm_df.shape)
-	sv_file = '/home/rmclaughlin/Ryan/Lulu/MAG_RPKMs/reduped_mag_rpkm/' + /
-				rep_sample_id + '.' +  seq_type + 'remapped.tsv'
-	trim_rpkm_df.to_csv(sv_file, sep='\t', index=False)
+	# subset the MAG DF with only the paired metaG and metaT
+	sub_mag_df = concat_TPM_df.loc[concat_TPM_df['metaG'] == \
+									map_dict[TPM_sample]
+									]
+	sub_mag_df['seq_header'] = [x.split('|', 1)[1] for x in sub_mag_df['rep_header']]
+	sub_mag_df['bin'] = [x.split('|', 1)[0].split('.')[-1] for x in sub_mag_df['rep_header']]
+	sub_mag_df['metaT'] = TPM_sample
+
+	sub_mag_df = sub_mag_df[['seq_header', 'cluster', 'bin', 'metaG', 'metaT', 'Length',
+								'EffectiveLength', 'NumReads', 'TPM'
+								]]
+	print(sub_mag_df.shape)
+	sv_file = '/home/rmclaughlin/Lulu/ProcessedData/PanMAGs/reduped_mag_TPM/' + \
+				map_dict[TPM_sample] + '.' + TPM_sample + \
+				'.remapped.tsv'
+	sub_mag_df.to_csv(sv_file, sep='\t', index=False)
 
 
 
