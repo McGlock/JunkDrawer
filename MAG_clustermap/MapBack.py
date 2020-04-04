@@ -4,9 +4,16 @@ import sys
 
 
 # open mapping file for metaG to metaT
-map_file = '/home/rmclaughlin/Lulu/ProcessedData/Illumina_metagenomes/TS_output/metaG_to_metaT_mapping.tsv'
+map_file = '/home/rmclaughlin/Lulu/ProcessedData/PanMAGs/metaG_to_metaT_mapping.tsv'
 map_df = pd.read_csv(map_file, header=0, sep='\t')
-map_dict = {x[0]:x[1] for x in zip(map_df['metaT'], map_df['metaG_asm'])}
+map_dict = {}
+for x in zip(map_df['metaT'], map_df['metaG_asm']):
+	metaT_id = x[0]
+	metaG_id = x[1]
+	if metaT_id in map_dict.keys():
+		map_dict[metaT_id].append(metaG_id)
+	else:
+		map_dict[metaT_id] = [metaG_id]
 
 TPM_dir = '/home/rmclaughlin/Lulu/ProcessedData/PanMAGs/metaT/TPM/'
 TPM_list = os.listdir(TPM_dir)
@@ -67,21 +74,21 @@ for TPM_sample in TPM_list:
 								]
 
 	# subset the MAG DF with only the paired metaG and metaT
-	sub_mag_df = concat_TPM_df.loc[concat_TPM_df['metaG'] == \
-									map_dict[TPM_sample]
-									]
-	sub_mag_df['seq_header'] = [x.split('|', 1)[1] for x in sub_mag_df['rep_header']]
-	sub_mag_df['bin'] = [x.split('|', 1)[0].split('.')[-1] for x in sub_mag_df['rep_header']]
-	sub_mag_df['metaT'] = TPM_sample
+	for mg in map_dict[TPM_sample]:
 
-	sub_mag_df = sub_mag_df[['seq_header', 'cluster', 'bin', 'metaG', 'metaT', 'Length',
-								'EffectiveLength', 'NumReads', 'TPM'
-								]]
-	print(sub_mag_df.shape)
-	sv_file = '/home/rmclaughlin/Lulu/ProcessedData/PanMAGs/reduped_mag_TPM/' + \
-				map_dict[TPM_sample] + '.' + TPM_sample + \
-				'.remapped.tsv'
-	sub_mag_df.to_csv(sv_file, sep='\t', index=False)
+		sub_mag_df = concat_TPM_df.loc[concat_TPM_df['metaG'] == mg]
+		sub_mag_df['seq_header'] = [x.split('|', 1)[1] for x in sub_mag_df['rep_header']]
+		sub_mag_df['bin'] = [x.split('|', 1)[0].split('.')[-1] for x in sub_mag_df['rep_header']]
+		sub_mag_df['metaT'] = TPM_sample
+
+		sub_mag_df = sub_mag_df[['seq_header', 'cluster', 'bin', 'metaG', 'metaT', 'Length',
+									'EffectiveLength', 'NumReads', 'TPM'
+									]]
+		print(sub_mag_df.shape)
+		sv_file = '/home/rmclaughlin/Lulu/ProcessedData/PanMAGs/reduped_mag_TPM/' + \
+					mg + '.' + TPM_sample + \
+					'.remapped.tsv'
+		sub_mag_df.to_csv(sv_file, sep='\t', index=False)
 
 
 
